@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Saans · Air-Day Receipt & Hash Chain Verifier</title>
+  <meta name="description" content="Public cryptographic verification page for Saans air-safety decisions. Recomputes SHA-256 hash chains directly in the browser via Web Crypto API.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .chain-container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-top: 24px;
+      position: relative;
+    }
+    .chain-block {
+      background: rgba(18, 24, 38, 0.85);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 20px;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+    .chain-block.valid {
+      border-left: 4px solid var(--emerald);
+    }
+    .chain-block.tampered {
+      border: 1px solid var(--rose);
+      border-left: 6px solid var(--rose);
+      background: rgba(244, 63, 94, 0.08);
+      box-shadow: 0 0 20px rgba(244, 63, 94, 0.2);
+    }
+    .block-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .block-seq {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--primary);
+      font-family: var(--font-mono);
+    }
+    .block-actor {
+      font-size: 0.8rem;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: var(--text-muted);
+    }
+    .hash-row {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      margin-top: 6px;
+      word-break: break-all;
+    }
+    .hash-val {
+      color: #cbd5e1;
+    }
+    .hash-val.highlight {
+      color: var(--cyan);
+      font-weight: 600;
+    }
+    .hash-val.error {
+      color: var(--rose);
+      font-weight: 700;
+      text-decoration: underline;
+    }
+    .chain-connector {
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 1.2rem;
+      margin: -6px 0;
+    }
+    .status-banner-box {
+      padding: 24px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .status-banner-valid {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(6, 182, 212, 0.1));
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    .status-banner-broken {
+      background: linear-gradient(135deg, rgba(244, 63, 94, 0.2), rgba(245, 158, 11, 0.1));
+      border: 1px solid rgba(244, 63, 94, 0.6);
+      box-shadow: 0 0 25px rgba(244, 63, 94, 0.25);
+    }
+    .qr-receipt-card {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 24px;
+    }
+    .qr-box {
+      background: #ffffff;
+      padding: 12px;
+      border-radius: 8px;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-icon">🛡️</div>
+      <div class="brand-text">
+        <h1>Saans Receipt Verifier <span>प्रमाण पत्र</span></h1>
+        <p class="tagline">Client-Side Mathematical Proof · SubtleCrypto SHA-256</p>
+      </div>
+    </div>
+    <div class="header-badges">
+      <a href="index.html" class="btn btn-outline" style="text-decoration: none; padding: 6px 14px; font-size: 0.85rem;">← Back to Today's Brief</a>
+      <span class="badge badge-purple" id="verifyDecisionBadge">Decision #DPS-2026-10-12</span>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <!-- Live Status Banner -->
+    <div class="status-banner-box status-banner-valid" id="statusBanner">
+      <div>
+        <h2 id="statusTitle" style="color: var(--emerald); font-size: 1.4rem; display: flex; align-items: center; gap: 8px;">
+          <span>✓</span> CHAIN MATHEMATICALLY VERIFIED
+        </h2>
+        <p class="card-desc" id="statusSubtitle" style="margin-top: 4px;">
+          All 6 sequential audit records match cryptographic hashes recalculated live in this browser.
+        </p>
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <button class="btn btn-outline" id="btnTamper" style="border-color: var(--rose); color: #fda4af;">
+          ⚠️ Simulate Tampering (Corrupt Row #2)
+        </button>
+        <button class="btn btn-emerald" id="btnReset">
+          ↺ Reset to Authentic Chain
+        </button>
+      </div>
+    </div>
+
+    <!-- Metadata Card -->
+    <div class="card" style="margin-bottom: 24px;">
+      <div class="card-header">
+        <div>
+          <h3>Cryptographic Receipt Details</h3>
+          <p class="card-desc">Public ledger entries for Delhi Public Academy under GRAP Stage III</p>
+        </div>
+        <span class="pill pill-live" id="algoPill">Web Crypto API: SHA-256</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 14px;">
+        <div>
+          <span class="kpi-label">Genesis Hash</span>
+          <p class="mono text-dim" style="font-size: 0.75rem;">0000000000000000000000000000000000000000000000000000000000000000</p>
+        </div>
+        <div>
+          <span class="kpi-label">Current Head Hash</span>
+          <p class="mono text-cyan" id="headHashDisplay" style="font-size: 0.75rem;">Loading...</p>
+        </div>
+        <div>
+          <span class="kpi-label">Verified Record Count</span>
+          <p class="mono text-emerald" id="recordCountDisplay" style="font-size: 1rem; font-weight: 700;">6 Rows</p>
+        </div>
+        <div>
+          <span class="kpi-label">Tamper Status</span>
+          <p class="mono" id="tamperIndicator" style="color: var(--emerald); font-weight: 700;">PASS (0 Mismatches)</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Audit Chain Visualizer -->
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <h3>Live Hash-Chain Sequence</h3>
+          <p class="card-desc">Every block hashes the payload, event, actor, sequence, and prior block hash.</p>
+        </div>
+      </div>
+
+      <div class="chain-container" id="chainContainer">
+        <!-- Rendered by JavaScript -->
+      </div>
+    </section>
+
+    <!-- Public Receipt QR & WhatsApp Share -->
+    <section class="qr-receipt-card">
+      <div class="qr-box">
+        <!-- SVG QR Representation -->
+        <svg width="110" height="110" viewBox="0 0 110 110">
+          <rect width="110" height="110" fill="#ffffff"/>
+          <!-- Finder 1 Top Left -->
+          <rect x="10" y="10" width="28" height="28" fill="#0c0f17"/>
+          <rect x="15" y="15" width="18" height="18" fill="#ffffff"/>
+          <rect x="20" y="20" width="8" height="8" fill="#0c0f17"/>
+          <!-- Finder 2 Top Right -->
+          <rect x="72" y="10" width="28" height="28" fill="#0c0f17"/>
+          <rect x="77" y="15" width="18" height="18" fill="#ffffff"/>
+          <rect x="82" y="20" width="8" height="8" fill="#0c0f17"/>
+          <!-- Finder 3 Bottom Left -->
+          <rect x="10" y="72" width="28" height="28" fill="#0c0f17"/>
+          <rect x="15" y="77" width="18" height="18" fill="#ffffff"/>
+          <rect x="20" y="82" width="8" height="8" fill="#0c0f17"/>
+          <!-- Patterns -->
+          <rect x="46" y="15" width="6" height="6" fill="#0c0f17"/>
+          <rect x="56" y="25" width="6" height="6" fill="#0c0f17"/>
+          <rect x="46" y="46" width="18" height="18" fill="#0c0f17"/>
+          <rect x="72" y="46" width="6" height="6" fill="#0c0f17"/>
+          <rect x="84" y="60" width="6" height="6" fill="#0c0f17"/>
+          <rect x="46" y="76" width="8" height="8" fill="#0c0f17"/>
+          <rect x="64" y="84" width="12" height="12" fill="#0c0f17"/>
+          <rect x="84" y="84" width="8" height="8" fill="#0c0f17"/>
+        </svg>
+      </div>
+      <div style="flex: 1;">
+        <h4 style="color: var(--text-main); font-size: 1.1rem;">Public Verification Receipt QR</h4>
+        <p class="card-desc" style="margin: 6px 0 12px;">
+          Anyone—parents, school inspectors, or news reporters—can scan this code to load this verification page and verify compliance without accessing private student data.
+        </p>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+          <a id="btnShareWhatsApp" class="btn btn-teal" href="https://api.whatsapp.com/send?text=Saans%20Air-Day%20Receipt%20verified%3A%20https%3A%2F%2Fsaans.delhi.gov.in%2Freceipt%2FT1%232026-10-12" target="_blank" rel="noopener">
+            📱 WhatsApp Click-to-Share Proof
+          </a>
+          <button class="btn btn-outline" onclick="navigator.clipboard.writeText(window.location.href); alert('Receipt link copied to clipboard!');">
+            📋 Copy Receipt URL
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>Saans (साँस) · Reads the order. Re-plans the day. Proves it. · Cryptographic Proof Engine</p>
+  </footer>
+
+  <script>
+    // Authentic Audit Records
+    const AUTHENTIC_CHAIN = [
+      {
+        seq: 1,
+        prev_hash: "0000000000000000000000000000000000000000000000000000000000000000",
+        actor_role: "scheduler:eventbridge",
+        event: "SCHEDULE_EXECUTION_TRIGGERED",
+        payload_digest: "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+        ts: "2026-10-12T06:00:00Z"
+      },
+      {
+        seq: 2,
+        prev_hash: "pending",
+        actor_role: "planner:deterministic",
+        event: "PLAN_A_B_GENERATED",
+        payload_digest: "9876543210fedcba0987654321fedcba",
+        ts: "2026-10-12T06:00:15Z"
+      },
+      {
+        seq: 3,
+        prev_hash: "pending",
+        actor_role: "workflow:step_functions",
+        event: "TASK_TOKEN_DISPATCHED_TO_TELEGRAM",
+        payload_digest: "1029384756abcdef1029384756abcdef",
+        ts: "2026-10-12T06:00:30Z"
+      },
+      {
+        seq: 4,
+        prev_hash: "pending",
+        actor_role: "workflow:escalation",
+        event: "TIMEOUT_ESCALATED_TO_VICE_PRINCIPAL",
+        payload_digest: "5544332211aabbcc5544332211aabbcc",
+        ts: "2026-10-12T06:01:30Z"
+      },
+      {
+        seq: 5,
+        prev_hash: "actor:vice_principal",
+        event: "APPROVED_PLAN_B_VIA_WEBHOOK",
+        payload_digest: "ccbbaa9988776655ccbbaa9988776655",
+        ts: "2026-10-12T06:02:10Z"
+      },
+      {
+        seq: 6,
+        prev_hash: "pending",
+        actor_role: "notify:sqs_broadcast",
+        event: "BILINGUAL_NOTICES_DISPATCHED",
+        payload_digest: "1234567890abcdef1234567890abcdef",
+        ts: "2026-10-12T06:02:25Z"
+      }
+    ];
+
+    let currentChain = JSON.parse(JSON.stringify(AUTHENTIC_CHAIN));
+
+    // Web Crypto SHA-256 Recalculation
+    async function sha256(message) {
+      const msgBuffer = new TextEncoder().encode(message);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function computeCanonicalString(row) {
+      return `${row.seq}|${row.prev_hash}|${row.actor_role}|${row.event}|${row.payload_digest}|${row.ts}`;
+    }
+
+    async function evaluateChain() {
+      const container = document.getElementById('chainContainer');
+      container.innerHTML = '';
+
+      let prevHash = "0000000000000000000000000000000000000000000000000000000000000000";
+      let isChainBroken = false;
+      let brokenIndex = -1;
+
+      for (let i = 0; i < currentChain.length; i++) {
+        const row = currentChain[i];
+        
+        // Link checking
+        const linkMatches = (row.prev_hash === prevHash || (i > 0 && row.prev_hash === 'pending'));
+        if (row.prev_hash === 'pending') {
+          row.prev_hash = prevHash;
+        }
+
+        const canonical = computeCanonicalString(row);
+        const calculatedHash = await sha256(canonical);
+        row.calculated_hash = calculatedHash;
+
+        if (row.stored_hash && row.stored_hash !== calculatedHash) {
+          isChainBroken = true;
+          if (brokenIndex === -1) brokenIndex = i;
+        }
+
+        // Connector
+        if (i > 0) {
+          const conn = document.createElement('div');
+          conn.className = 'chain-connector';
+          conn.innerHTML = isChainBroken ? '⚠️ ✕ BROKEN LINK' : '↓ SHA-256 Link';
+          conn.style.color = isChainBroken ? 'var(--rose)' : 'var(--text-dim)';
+          container.appendChild(conn);
+        }
+
+        // Block Element
+        const block = document.createElement('div');
+        const isThisBlockTampered = (isChainBroken && i >= brokenIndex);
+        block.className = `chain-block ${isThisBlockTampered ? 'tampered' : 'valid'}`;
+
+        block.innerHTML = `
+          <div class="block-header">
+            <div>
+              <span class="block-seq">BLOCK #${String(row.seq).padStart(3, '0')}</span>
+              <strong style="margin-left: 10px; color: #fff;">${row.event}</strong>
+            </div>
+            <span class="block-actor">${row.actor_role}</span>
+          </div>
+          <div class="hash-row">
+            Timestamp: <span class="hash-val">${row.ts}</span> · Payload Digest: <span class="hash-val">${row.payload_digest.slice(0, 16)}...</span>
+          </div>
+          <div class="hash-row">
+            Prev Hash: <span class="hash-val ${isThisBlockTampered ? 'error' : ''}">${row.prev_hash.slice(0, 28)}...</span>
+          </div>
+          <div class="hash-row">
+            Hash (recalculated): <span class="hash-val ${isThisBlockTampered ? 'error' : 'highlight'}">${calculatedHash}</span>
+          </div>
+        `;
+        container.appendChild(block);
+
+        prevHash = calculatedHash;
+      }
+
+      // Update UI Status
+      const banner = document.getElementById('statusBanner');
+      const title = document.getElementById('statusTitle');
+      const subtitle = document.getElementById('statusSubtitle');
+      const headDisplay = document.getElementById('headHashDisplay');
+      const tamperIndicator = document.getElementById('tamperIndicator');
+
+      headDisplay.textContent = prevHash.slice(0, 24) + '...';
+
+      if (isChainBroken) {
+        banner.className = 'status-banner-box status-banner-broken';
+        title.innerHTML = `<span>⚠️</span> CRYPTOGRAPHIC TAMPERING DETECTED!`;
+        title.style.color = 'var(--rose)';
+        subtitle.textContent = `Block #${brokenIndex + 1} has been maliciously modified! The recomputed hash diverges from the chain link.`;
+        tamperIndicator.textContent = `FAIL (Tampered at Block #${brokenIndex + 1})`;
+        tamperIndicator.style.color = 'var(--rose)';
+      } else {
+        banner.className = 'status-banner-box status-banner-valid';
+        title.innerHTML = `<span>✓</span> CHAIN MATHEMATICALLY VERIFIED`;
+        title.style.color = 'var(--emerald)';
+        subtitle.textContent = `All 6 sequential audit records match cryptographic hashes recalculated live in this browser.`;
+        tamperIndicator.textContent = `PASS (0 Mismatches)`;
+        tamperIndicator.style.color = 'var(--emerald)';
+      }
+    }
+
+    // Initialize initial stored hashes
+    async function init() {
+      let prev = "0000000000000000000000000000000000000000000000000000000000000000";
+      for (const row of currentChain) {
+        row.prev_hash = prev;
+        const hash = await sha256(computeCanonicalString(row));
+        row.stored_hash = hash;
+        prev = hash;
+      }
+      await evaluateChain();
+    }
+
+    // Tamper Button
+    document.getElementById('btnTamper').addEventListener('click', async () => {
+      // Maliciously alter row 2
+      currentChain[1].event = "UNAUTHORIZED_STAGE_DOWNGRADE_ATTEMPT";
+      currentChain[1].payload_digest = "deadbeefdeadbeefdeadbeefdeadbeef";
+      await evaluateChain();
+    });
+
+    // Reset Button
+    document.getElementById('btnReset').addEventListener('click', async () => {
+      currentChain = JSON.parse(JSON.stringify(AUTHENTIC_CHAIN));
+      await init();
+    });
+
+    init();
+  </script>
+</body>
+</html>

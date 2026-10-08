@@ -19,13 +19,13 @@ def run_tests():
 
     runner = unittest.TextTestRunner(verbosity=2)
     print("=" * 70)
-    print("SAANS HACKATHON TEST SUITE - DAY 1 GATE VALIDATION")
+    print("SAANS HACKATHON TEST SUITE - DAY 1, DAY 2 & DAY 3 VALIDATION")
     print("=" * 70)
     result = runner.run(suite)
     
     print("\n" + "=" * 70)
     if result.wasSuccessful():
-        print(f"✅ ALL {result.testsRun} TESTS PASSED! DAY 1 GATE IS GREEN.")
+        print(f"✅ ALL {result.testsRun} TESTS PASSED! GATES ARE GREEN.")
     else:
         print(f"❌ {len(result.failures)} FAILURES, {len(result.errors)} ERRORS out of {result.testsRun} tests.")
     print("=" * 70)

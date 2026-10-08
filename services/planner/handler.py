@@ -140,6 +140,7 @@ def rehearse_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         school_jurisdiction="Delhi",
         decision_id=f"REHEARSAL#STAGE_{stage}"
     )
+    plan_result["declared_stage"] = stage
 
     return {
         "statusCode": 200,

@@ -1,0 +1,41 @@
+{
+  "profile_id": "outdoor_crew_v1",
+  "profile_name": "Delhi Municipal Ground & Construction Crew",
+  "target_sector": "outdoor_workers",
+  "jurisdiction": "Delhi-NCR",
+  "work_shifts": [
+    { "shift_id": "S1", "name": "Morning Heavy Earthwork", "start": "07:00", "end": "11:00", "outdoor": true, "strenuous": true },
+    { "shift_id": "S2", "name": "Midday Maintenance", "start": "11:00", "end": "14:00", "outdoor": true, "strenuous": false },
+    { "shift_id": "S3", "name": "Afternoon Transport & Paving", "start": "14:00", "end": "18:00", "outdoor": true, "strenuous": true }
+  ],
+  "rules": [
+    {
+      "rule_id": "crew-r01",
+      "applies_to": ["outdoor_crew"],
+      "condition": { "stage_at_least": "III" },
+      "action": {
+        "strenuous_outdoor_work": "banned",
+        "dust_generating_operations": "banned",
+        "mandatory_respiratory_ppe": "N95_or_P2",
+        "fallback_assignment": "Indoor Equipment Maintenance & Safety Training"
+      },
+      "source_quote": "All non-essential outdoor manual excavation and earthmoving shall remain suspended under Stage III."
+    },
+    {
+      "rule_id": "crew-r02",
+      "applies_to": ["outdoor_crew"],
+      "condition": { "stage_at_least": "IV" },
+      "action": {
+        "all_outdoor_work": "banned",
+        "paid_pollution_standby": "mandatory"
+      },
+      "source_quote": "Total cessation of outdoor civic construction and linear public works under Stage IV."
+    }
+  ],
+  "rehearsal_adaptation": {
+    "stage_I": "Full shifts allowed with advisory dust suppression",
+    "stage_II": "Water sprinkling mandatory; heavy shifts rotated",
+    "stage_III": "S1 earthwork suspended; crew reassigned to indoor depot maintenance",
+    "stage_IV": "All outdoor work halted; paid standby"
+  }
+}
