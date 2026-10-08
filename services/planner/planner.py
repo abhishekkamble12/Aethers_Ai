@@ -161,6 +161,7 @@ def plan_schedule(
         # All periods allowed: no changes needed
         return {
             "decision_id": decision_id,
+            "declared_stage": declared_stage,
             "status": "confirmed_no_change",
             "message": "All periods compliant under current orders and forecast.",
             "plan_a": [],
@@ -325,6 +326,7 @@ def plan_schedule(
 
     return {
         "decision_id": decision_id,
+        "declared_stage": declared_stage,
         "status": "pending_approval",
         "plan_a": plan_a_swaps,
         "plan_b": plan_b_fallbacks,
