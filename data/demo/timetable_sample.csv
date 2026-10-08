@@ -1,0 +1,49 @@
+class,day,period,start,end,subject,teacher_code,venue,outdoor,locked
+6A,Monday,P1,08:30,09:10,English,T_ENG1,Room_101,false,false
+6A,Monday,P2,09:10,09:50,Mathematics,T_MATH1,Room_101,false,false
+6A,Monday,P3,10:05,10:45,Physical Education,T_PE1,Ground_A,true,false
+6A,Monday,P4,10:45,11:25,Science,T_SCI1,Lab_1,false,true
+6A,Monday,P5,12:00,12:40,Hindi,T_HIN1,Room_101,false,false
+6A,Monday,P6,12:40,13:20,Social Studies,T_SST1,Room_101,false,false
+6A,Monday,P7,13:25,14:05,Art,T_ART1,Art_Room,false,false
+6A,Monday,P8,14:05,14:45,Library,T_LIB1,Library,false,false
+7A,Monday,P1,08:30,09:10,Mathematics,T_MATH2,Room_102,false,false
+7A,Monday,P2,09:10,09:50,Physical Education,T_PE2,Ground_A,true,false
+7A,Monday,P3,10:05,10:45,Science,T_SCI2,Room_102,false,false
+7A,Monday,P4,10:45,11:25,English,T_ENG2,Room_102,false,false
+7A,Monday,P5,12:00,12:40,Social Studies,T_SST2,Room_102,false,false
+7A,Monday,P6,12:40,13:20,Hindi,T_HIN2,Room_102,false,false
+7A,Monday,P7,13:25,14:05,Computer,T_CS1,Computer_Lab,false,true
+7A,Monday,P8,14:05,14:45,Music,T_MUS1,Music_Room,false,false
+7B,Monday,P1,08:30,09:10,Hindi,T_HIN1,Room_103,false,false
+7B,Monday,P2,09:10,09:50,Physical Education,T_PE1,Ground_A,true,false
+7B,Monday,P3,10:05,10:45,Mathematics,T_MATH1,Room_103,false,false
+7B,Monday,P4,10:45,11:25,Social Studies,T_SST1,Room_103,false,false
+7B,Monday,P5,12:00,12:40,Science,T_SCI1,Room_103,false,false
+7B,Monday,P6,12:40,13:20,English,T_ENG1,Room_103,false,false
+7B,Monday,P7,13:25,14:05,Library,T_LIB1,Library,false,false
+7B,Monday,P8,14:05,14:45,Art,T_ART1,Art_Room,false,false
+8A,Monday,P1,08:30,09:10,Science,T_SCI3,Room_104,false,false
+8A,Monday,P2,09:10,09:50,Social Studies,T_SST2,Room_104,false,false
+8A,Monday,P3,10:05,10:45,English,T_ENG2,Room_104,false,false
+8A,Monday,P4,10:45,11:25,Physical Education,T_PE2,Ground_B,true,false
+8A,Monday,P5,12:00,12:40,Mathematics,T_MATH2,Room_104,false,false
+8A,Monday,P6,12:40,13:20,Sanskrit,T_SKT1,Room_104,false,false
+8A,Monday,P7,13:25,14:05,Computer,T_CS1,Computer_Lab,false,false
+8A,Monday,P8,14:05,14:45,Crafts,T_ART2,Room_104,false,false
+9A,Monday,P1,08:30,09:10,Physics,T_PHY1,Lab_2,false,true
+9A,Monday,P2,09:10,09:50,Chemistry,T_CHE1,Lab_3,false,true
+9A,Monday,P3,10:05,10:45,Mathematics,T_MATH3,Room_201,false,false
+9A,Monday,P4,10:45,11:25,English,T_ENG3,Room_201,false,false
+9A,Monday,P5,12:00,12:40,Physical Education,T_PE1,Ground_A,true,false
+9A,Monday,P6,12:40,13:20,Biology,T_BIO1,Room_201,false,false
+9A,Monday,P7,13:25,14:05,History,T_HIS1,Room_201,false,false
+9A,Monday,P8,14:05,14:45,Economics,T_ECO1,Room_201,false,false
+10A,Monday,P1,08:30,09:10,Mathematics,T_MATH3,Room_202,false,false
+10A,Monday,P2,09:10,09:50,English,T_ENG3,Room_202,false,false
+10A,Monday,P3,10:05,10:45,Hindi,T_HIN3,Room_202,false,false
+10A,Monday,P4,10:45,11:25,Science,T_SCI3,Room_202,false,false
+10A,Monday,P5,12:00,12:40,Social Studies,T_SST3,Room_202,false,false
+10A,Monday,P6,12:40,13:20,Physical Education,T_PE2,Ground_A,true,false
+10A,Monday,P7,13:25,14:05,Mathematics,T_MATH3,Room_202,false,false
+10A,Monday,P8,14:05,14:45,Library,T_LIB1,Library,false,false

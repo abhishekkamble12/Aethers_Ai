@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SaansRulesetSchema",
+  "type": "object",
+  "required": ["ruleset_version", "jurisdiction", "declared_stage", "rules", "advisory_pm25"],
+  "properties": {
+    "ruleset_version": {
+      "type": "string",
+      "description": "Unique version identifier, e.g. 2026-10-08-r1"
+    },
+    "jurisdiction": {
+      "type": "string",
+      "enum": ["Delhi", "Delhi-NCR", "Haryana", "Uttar Pradesh", "Rajasthan"]
+    },
+    "declared_stage": {
+      "type": "string",
+      "enum": ["I", "II", "III", "IV"]
+    },
+    "effective_from": {
+      "type": "string",
+      "format": "date"
+    },
+    "source_circular_id": {
+      "type": "string"
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rule_id", "applies_to", "class_band", "condition", "action", "source_quote"],
+        "properties": {
+          "rule_id": { "type": "string" },
+          "applies_to": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["school", "sports_academy", "outdoor_crew"] }
+          },
+          "class_band": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["primary", "middle", "secondary", "senior_secondary", "all"] }
+          },
+          "condition": {
+            "type": "object",
+            "properties": {
+              "stage_at_least": { "type": "string", "enum": ["I", "II", "III", "IV"] },
+              "pm25_greater_than": { "type": "number" },
+              "time_window": {
+                "type": "object",
+                "properties": {
+                  "start": { "type": "string" },
+                  "end": { "type": "string" }
+                }
+              }
+            }
+          },
+          "action": {
+            "type": "object",
+            "required": ["outdoor_sports", "outdoor_pt"],
+            "properties": {
+              "outdoor_sports": { "type": "string", "enum": ["allowed", "advisory", "restricted", "banned"] },
+              "outdoor_pt": { "type": "string", "enum": ["allowed", "advisory", "restricted", "banned"] },
+              "hybrid_mode": { "type": "string", "enum": ["optional", "mandatory", "not_applicable"] }
+            }
+          },
+          "source_id": { "type": "string" },
+          "source_quote": {
+            "type": "string",
+            "description": "Verbatim quote extracted from the circular text. Must strictly match substring."
+          }
+        }
+      }
+    },
+    "advisory_pm25": {
+      "type": "object",
+      "required": ["advisory_at", "restricted_at"],
+      "properties": {
+        "advisory_at": { "type": "number", "default": 90 },
+        "restricted_at": { "type": "number", "default": 120 }
+      }
+    }
+  }
+}

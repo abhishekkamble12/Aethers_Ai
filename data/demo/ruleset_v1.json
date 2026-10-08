@@ -1,0 +1,44 @@
+{
+  "ruleset_version": "2026-10-08-r1",
+  "jurisdiction": "Delhi",
+  "declared_stage": "III",
+  "effective_from": "2026-10-08",
+  "source_circular_id": "DoE-CAQM-GRAP3-2026-01",
+  "rules": [
+    {
+      "rule_id": "r-017",
+      "applies_to": ["school"],
+      "class_band": ["primary", "middle", "secondary", "senior_secondary", "all"],
+      "condition": {
+        "stage_at_least": "III"
+      },
+      "action": {
+        "outdoor_sports": "banned",
+        "outdoor_pt": "banned",
+        "hybrid_mode": "optional"
+      },
+      "source_id": "DoE-circular-40-dt-17012025",
+      "source_quote": "All outdoor sports and physical education activities in schools shall remain strictly suspended under Stage III of GRAP."
+    },
+    {
+      "rule_id": "r-018",
+      "applies_to": ["school"],
+      "class_band": ["primary"],
+      "condition": {
+        "stage_at_least": "II",
+        "pm25_greater_than": 120
+      },
+      "action": {
+        "outdoor_sports": "restricted",
+        "outdoor_pt": "restricted",
+        "hybrid_mode": "not_applicable"
+      },
+      "source_id": "CAQM-Advisory-Sept-16-2026",
+      "source_quote": "Schools are advised to avoid outdoor sports activities for younger children during severe peak exposure windows and reschedule to indoor or alternate sessions."
+    }
+  ],
+  "advisory_pm25": {
+    "advisory_at": 90,
+    "restricted_at": 120
+  }
+}
