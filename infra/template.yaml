@@ -113,6 +113,23 @@ Resources:
             Path: /receipts/{id}
             Method: get
 
+  # 6. Bilingual Notification & WhatsApp Dispatch Function
+  NotificationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handler.notify_handler
+      CodeUri: ../services/notify/
+      Description: Drafts bilingual safety notices with Bedrock/template fallback and WhatsApp link builder
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SaansTable
+      Events:
+        NotifyApi:
+          Type: Api
+          Properties:
+            Path: /notifications/dispatch
+            Method: post
+
 Outputs:
   SaansTableArn:
     Description: DynamoDB Single Table ARN
