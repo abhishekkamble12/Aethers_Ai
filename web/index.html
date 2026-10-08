@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Saans · School Air Safety & Day Re-Planner</title>
+  <meta name="description" content="Reads the order. Re-plans the day. Proves it. Automated GRAP air-safety school day re-planner for Delhi-NCR.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Replay Banner -->
+  <div class="replay-banner" id="replayBanner">
+    <span class="pulse-dot"></span>
+    <strong>REPLAY SCENARIO</strong> · Delhi-NCR GRAP Stage III Event · Modelled Forecast Snapshot (SAFAR-IITM)
+  </div>
+
+  <!-- App Header -->
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-icon">💨</div>
+      <div class="brand-text">
+        <h1>Saans <span>साँस</span></h1>
+        <p class="tagline">Reads the order. Re-plans the day. Proves it.</p>
+      </div>
+    </div>
+    <div class="header-badges">
+      <span class="badge badge-purple" id="tenantBadge">Delhi Public Academy (ID: T-104)</span>
+      <span class="badge badge-dark" id="dateBadge">Mon, 12 Oct 2026</span>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <!-- Top KPI Grid -->
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <span class="kpi-label">PE Minutes Preserved</span>
+        <div class="kpi-val text-emerald" id="kpiPePreserved">100%</div>
+        <span class="kpi-sub">CAQM advice: Re-plan, don't cancel</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">Modelled Exposure Avoided</span>
+        <div class="kpi-val text-cyan" id="kpiExposureAvoided">58.4%</div>
+        <span class="kpi-sub">Peak PM2.5 (395 µg/m³) avoided</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">Current Declared Stage</span>
+        <div class="kpi-val text-amber" id="kpiStage">Stage III</div>
+        <span class="kpi-sub">CAQM Dir. 84 / DoE Circ. 40</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">Cryptographic Audit Head</span>
+        <div class="kpi-val mono text-purple" id="kpiAuditHead">#000004</div>
+        <span class="kpi-sub" id="kpiAuditStatus">● Chain mathematically verified</span>
+      </div>
+    </section>
+
+    <!-- Stage Rehearsal Interactive Simulator -->
+    <section class="card rehearsal-card">
+      <div class="card-header">
+        <div>
+          <h2>⚡ Stage Rehearsal Simulator</h2>
+          <p class="card-desc">Drag the declared stage to watch tomorrow's timetable re-plan instantly before any order lands.</p>
+        </div>
+        <span class="pill pill-live">Deterministic Engine Active</span>
+      </div>
+
+      <div class="slider-wrapper">
+        <div class="stage-labels">
+          <span class="stage-label" data-stage="I">Stage I<br><small>Poor (201-300)</small></span>
+          <span class="stage-label" data-stage="II">Stage II<br><small>Very Poor (301-400)</small></span>
+          <span class="stage-label active" data-stage="III">Stage III<br><small>Severe (401-450)</small></span>
+          <span class="stage-label" data-stage="IV">Stage IV<br><small>Severe+ (>450)</small></span>
+        </div>
+        <input type="range" min="1" max="4" value="3" id="stageSlider" class="stage-slider" aria-label="GRAP Stage Selector">
+      </div>
+    </section>
+
+    <!-- Today's Brief & Timetable Action Grid -->
+    <section class="card brief-card">
+      <div class="card-header">
+        <div>
+          <h2>📋 Today's Brief: Schedule Optimization</h2>
+          <p class="card-desc" id="briefReasonLine">Stage III Order (r-017) strictly suspends outdoor sports. 4 classes rescheduled.</p>
+        </div>
+        <div class="action-buttons" id="approvalActions">
+          <button class="btn btn-emerald" id="btnApproveA">✓ Approve Plan A (Swaps)</button>
+          <button class="btn btn-teal" id="btnApproveB">★ Approve Plan B (Indoor Bank)</button>
+          <button class="btn btn-outline" id="btnReject">✕ Escalate / Reject</button>
+        </div>
+      </div>
+
+      <!-- Live Timetable Comparison Table -->
+      <div class="table-container">
+        <table class="schedule-table">
+          <thead>
+            <tr>
+              <th>Class</th>
+              <th>Period & Time</th>
+              <th>Original Activity</th>
+              <th>Forecast PM2.5</th>
+              <th>Order Classification</th>
+              <th>Saans Optimized Action</th>
+            </tr>
+          </thead>
+          <tbody id="scheduleTableBody">
+            <!-- Dynamically populated by app.js -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Public Receipt & In-Browser SHA256 Verification -->
+    <section class="card receipt-card">
+      <div class="card-header">
+        <div>
+          <h2>🔒 Tamper-Evident Air-Day Receipt</h2>
+          <p class="card-desc">Every action is recorded in a cryptographic hash chain. Verified locally via browser WebCrypto.</p>
+        </div>
+        <button class="btn btn-dark" id="btnVerifyChain">⚡ Re-verify Chain in Browser</button>
+      </div>
+
+      <div class="audit-log-container" id="auditLogContainer">
+        <!-- Rendered by app.js -->
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>Saans · Built for Environmental Hacks 2026 (Oct 8–11) · Track: Air (School Safety) · Built with AWS Serverless</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

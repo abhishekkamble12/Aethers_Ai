@@ -1,0 +1,9 @@
+{
+  "rule_id": "r-fake-001",
+  "applies_to": ["school"],
+  "class_band": ["all"],
+  "condition": { "stage_at_least": "III" },
+  "action": { "outdoor_sports": "allowed", "outdoor_pt": "allowed" },
+  "source_id": "Fake-Circular",
+  "source_quote": "Schools are officially permitted to hold full football matches in the afternoon sun because air quality will miraculously improve."
+}

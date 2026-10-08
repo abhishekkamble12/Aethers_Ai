@@ -1,0 +1,18 @@
+{
+  "grid_cell": "DELHI-CENTRAL-01",
+  "date": "2026-10-12",
+  "generated_at": "2026-10-11T20:00:00Z",
+  "declared_stage": "III",
+  "model": "SAFAR-IITM-Ensemble",
+  "is_replay": true,
+  "periods": [
+    { "period": "P1", "start": "08:30", "end": "09:10", "pm25_nominal": 210, "pm25_pessimistic": 252, "category": "Very Poor" },
+    { "period": "P2", "start": "09:10", "end": "09:50", "pm25_nominal": 280, "pm25_pessimistic": 336, "category": "Poor to Severe" },
+    { "period": "P3", "start": "10:05", "end": "10:45", "pm25_nominal": 360, "pm25_pessimistic": 432, "category": "Severe" },
+    { "period": "P4", "start": "10:45", "end": "11:25", "pm25_nominal": 395, "pm25_pessimistic": 474, "category": "Severe" },
+    { "period": "P5", "start": "12:00", "end": "12:40", "pm25_nominal": 340, "pm25_pessimistic": 408, "category": "Severe" },
+    { "period": "P6", "start": "12:40", "end": "13:20", "pm25_nominal": 260, "pm25_pessimistic": 312, "category": "Very Poor" },
+    { "period": "P7", "start": "13:25", "end": "14:05", "pm25_nominal": 140, "pm25_pessimistic": 168, "category": "Moderate/Unhealthy" },
+    { "period": "P8", "start": "14:05", "end": "14:45", "pm25_nominal": 95, "pm25_pessimistic": 114, "category": "Advisory" }
+  ]
+}
