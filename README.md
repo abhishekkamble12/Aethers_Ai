@@ -1,13 +1,16 @@
-# 💨 Saans (साँस) — Day 1 Build & Gate Verification
+# 💨 Saans (साँस) — Air-Safety School Day Planner & Verifier
 
 > **Reads the order. Re-plans the day. Proves it.**  
 > Track: Air ("School safety on bad days"), Environmental Hacks (Oct 8–11, 2026).
 
 ---
 
-## 🎯 Day 1 Gate Status: **GREEN**
+## 🎯 Hackathon Gates Status
 
-**Target:** *A scheduled run in AWS outputs a valid Plan A or Plan B for a replay day, and the 10 planner tests pass.*
+| Milestone | Gate Requirement | Status |
+| :--- | :--- | :---: |
+| **Day 1: Foundations** | Scheduled run outputs valid Plan A/B + 10 planner tests pass | ✅ **PASSED (16/16 tests green)** |
+| **Day 2: The Real Loop** | Step Functions approval loop with escalation + Rule-diff with verbatim quotes + Bilingual WhatsApp notices | ✅ **PASSED (23/23 tests green)** |
 
 ---
 
@@ -33,58 +36,67 @@ d:\Aethers_Ai\
 │   ├── planner/
 │   │   ├── csv_loader.py                 # Timetable CSV loader with row-level validation
 │   │   ├── planner.py                    # Deterministic Swap Planner + Plan B Fallback bank
+│   │   ├── teacher_schedule.py           # Personalized indoor/swap rosters for teachers
 │   │   └── handler.py                    # Lambda handlers for EventBridge & Rehearsal API
 │   ├── circular/
-│   │   └── validator.py                  # Quote substring checker & hostile refusal logic
+│   │   ├── validator.py                  # Quote substring checker & hostile refusal logic
+│   │   └── diff_engine.py                # Active vs Candidate ruleset diff with quote citations
+│   ├── workflow/
+│   │   ├── state_machine.json            # Step Functions ASL with waitForTaskToken & escalation
+│   │   ├── workflow_manager.py           # Token registry isolating raw task tokens
+│   │   └── handler.py                    # Approval webhook handler with allowlist checks
+│   ├── notify/
+│   │   ├── drafting.py                   # Bilingual notice drafting & WhatsApp click-to-share links
+│   │   └── handler.py                    # Lambda notification dispatcher
 │   └── audit/
-│       └── hash_chain.py                 # Tamper-evident SHA256 audit log engine
+│       ├── hash_chain.py                 # Tamper-evident SHA256 audit log engine
+│       └── handler.py                    # Public receipt verification API handler
 ├── tests/
 │   ├── test_planner.py                   # 10 mandatory planner tests
 │   ├── test_audit.py                     # Hash chain integrity & tamper-detection tests
-│   └── test_circular_validator.py        # Real circular approval & hostile refusal tests
+│   ├── test_circular_validator.py        # Real circular approval & hostile refusal tests
+│   └── test_day2_loop.py                 # Day 2: Workflow escalation, teacher schedules, diff engine, WhatsApp
 ├── web/
-│   ├── index.html                        # Today's Brief, Stage Rehearsal slider & Receipt
+│   ├── index.html                        # Today's Brief, Stage Rehearsal slider, Rule-Diff, Receipts
 │   ├── styles.css                        # Glassmorphism dark mode aesthetic
 │   └── app.js                            # Client-side Rehearsal & in-browser WebCrypto verifier
-├── run_all_tests.py                      # Unified test runner
-└── verify_day1_pipeline.py               # Full end-to-end pipeline demonstration script
+├── run_all_tests.py                      # Unified test runner (all 23 tests)
+├── verify_day1_pipeline.py               # Day 1 pipeline demonstration script
+└── verify_day2_loop.py                   # Day 2 complete loop demonstration script
 ```
 
 ---
 
-## 🧪 The 10 Mandatory Planner Tests
+## 🧪 All Automated Tests
 
-Defined in [`tests/test_planner.py`](file:///d:/Aethers_Ai/tests/test_planner.py):
-
-| # | Test Name | Constraint / Behavior Verified |
-|---|-----------|--------------------------------|
-| 1 | `test_01_valid_swap_exists_and_chosen` | Valid swap to a clean period with available teacher and ground is selected. |
-| 2 | `test_02_best_partner_teacher_busy_next_chosen` | When the optimal slot has a teacher clash, the next best conflict-free slot is picked. |
-| 3 | `test_03_ground_double_booked_rejected` | Double-booking grounds is rejected; falls back to Plan B indoor session. |
-| 4 | `test_04_outdoor_sports_banned_for_day_so_plan_b` | Under Stage III ban, all outdoor sports fall back to Plan B; preserves 100% of PE minutes. |
-| 5 | `test_05_locked_period_never_moved` | Locked periods (exams/labs) are strictly immutable. |
-| 6 | `test_06_two_proposals_conflict_revalidates_and_resolves` | Multi-class competition for the same slot is reconciled without double-booking. |
-| 7 | `test_07_all_periods_allowed_no_change` | Clean forecast produces `confirmed_no_change` with zero churn. |
-| 8 | `test_08_fine_nominally_but_fails_pessimistic_rejected` | Periods that exceed threshold under the $+20\%$ pessimistic forecast ($\delta=0.20$) are rejected. |
-| 9 | `test_09_stage_ban_never_relaxed_by_low_pm25` | Stage-level legal bans cannot be relaxed by local low PM2.5 readings. |
-| 10 | `test_10_ruleset_for_another_jurisdiction_rejected` | A ruleset from another jurisdiction (e.g., Maharashtra) fails closed. |
-
----
-
-## 🚀 Running the Tests & Verification
-
-### 1. Run all Unit Tests:
+Run the complete test suite:
 ```bash
 python run_all_tests.py
 ```
 
-### 2. Run End-to-End Local Pipeline Demo:
+The suite covers **23 automated tests**:
+1. **Planner Tests (10 tests)**: Valid swaps, busy teacher fallback, ground double-booking rejection, Stage III outdoor ban (Plan B fallback), locked period protection, multi-class collision resolution, clean air zero-churn, $+20\%$ pessimistic forecast rejection ($\delta=0.20$), Stage ban priority over clean air, and jurisdiction mismatch failure.
+2. **Audit & Cryptographic Chain (3 tests)**: Valid sequence verification, tamper-evidence detection, and broken link detection.
+3. **Circular Extraction & Refusal (3 tests)**: Verbatim quote substring validation, hallucinated quote rejection, and prompt injection refusal (*"SYSTEM OVERRIDE"*).
+4. **Day 2 Loop Suite (7 tests)**: Direct approval transition, 60s timeout escalation to Vice-Principal, final timeout fail-safe with zero broadcast, secure one-time token resolution, teacher schedule generator with indoor venue mapping, ruleset diff computation with quote citations, bilingual notice drafting, and static fallback resiliency.
+
+---
+
+## 🚀 Execution & Verification Commands
+
+### Run Day 2 End-to-End Loop Demonstration:
 ```bash
-python verify_day1_pipeline.py
+python verify_day2_loop.py
 ```
 
-### 3. Open Web UI Dashboard:
-Open [`web/index.html`](file:///d:/Aethers_Ai/web/index.html) in any browser to interact with:
-- The **Stage Rehearsal Slider** (drag from Stage I to IV to watch the timetable recalculate in real time).
-- The **Before & After Timetable Grid** with reason lines and rule IDs.
-- In-browser **SubtleCrypto SHA-256 Hash Chain Verification**.
+### Run All Unit Tests:
+```bash
+python run_all_tests.py
+```
+
+### Interactive Dashboard:
+Open [`web/index.html`](file:///d:/Aethers_Ai/web/index.html) in your browser:
+- **Stage Rehearsal Slider**: Drag between Stage I and Stage IV to watch schedules re-plan in real time.
+- **Rule-Diff Screen**: Inspect candidate rules with verbatim circular quotes highlighted.
+- **Teacher Rosters & 1-Tap WhatsApp Buttons**: Pre-formatted bilingual parent notices ready for WhatsApp share.
+- **Air-Day Cryptographic Receipt**: Live in-browser SHA-256 chain verification using the WebCrypto API.

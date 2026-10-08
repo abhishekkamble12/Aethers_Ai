@@ -1,0 +1,162 @@
+{
+  "Comment": "Saans School Air-Safety Automated Re-planning & Approval Workflow",
+  "StartAt": "LoadContext",
+  "States": {
+    "LoadContext": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${IngestPlannerFunctionArn}",
+        "Payload": {
+          "tenant_id.$": "$.tenant_id",
+          "date.$": "$.date",
+          "stage.$": "$.stage"
+        }
+      },
+      "ResultSelector": {
+        "decision.$": "$.Payload.decision",
+        "audit_head.$": "$.Payload.audit_head"
+      },
+      "ResultPath": "$.planner_output",
+      "Next": "CheckIfInterventionNeeded"
+    },
+    "CheckIfInterventionNeeded": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.planner_output.decision.status",
+          "StringEquals": "confirmed_no_change",
+          "Next": "AuditCloseNoChange"
+        }
+      ],
+      "Default": "RequestPrincipalApproval"
+    },
+    "RequestPrincipalApproval": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Parameters": {
+        "FunctionName": "${ApprovalFunctionArn}",
+        "Payload": {
+          "taskToken.$": "$$.Task.Token",
+          "tenant_id.$": "$.tenant_id",
+          "decision_id.$": "$.planner_output.decision.decision_id",
+          "plan_summary.$": "$.planner_output.decision"
+        }
+      },
+      "ResultPath": "$.approval_result",
+      "TimeoutSeconds": 60,
+      "Catch": [
+        {
+          "ErrorEquals": ["States.Timeout"],
+          "ResultPath": "$.timeout_error",
+          "Next": "EscalateToVicePrincipal"
+        }
+      ],
+      "Next": "ProcessDecisionAction"
+    },
+    "EscalateToVicePrincipal": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Parameters": {
+        "FunctionName": "${ApprovalFunctionArn}",
+        "Payload": {
+          "taskToken.$": "$$.Task.Token",
+          "tenant_id.$": "$.tenant_id",
+          "escalation": true,
+          "decision_id.$": "$.planner_output.decision.decision_id",
+          "plan_summary.$": "$.planner_output.decision"
+        }
+      },
+      "ResultPath": "$.escalated_approval_result",
+      "TimeoutSeconds": 60,
+      "Catch": [
+        {
+          "ErrorEquals": ["States.Timeout"],
+          "ResultPath": "$.final_timeout_error",
+          "Next": "FailSafeNoBroadcast"
+        }
+      ],
+      "Next": "ProcessDecisionAction"
+    },
+    "ProcessDecisionAction": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Or": [
+            {
+              "Variable": "$.approval_result.action",
+              "StringEquals": "APPROVE_PLAN_A"
+            },
+            {
+              "Variable": "$.approval_result.action",
+              "StringEquals": "APPROVE_PLAN_B"
+            },
+            {
+              "Variable": "$.escalated_approval_result.action",
+              "StringEquals": "APPROVE_PLAN_A"
+            },
+            {
+              "Variable": "$.escalated_approval_result.action",
+              "StringEquals": "APPROVE_PLAN_B"
+            }
+          ],
+          "Next": "DraftAndDispatchNotices"
+        }
+      ],
+      "Default": "FailSafeNoBroadcast"
+    },
+    "DraftAndDispatchNotices": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${NotificationFunctionArn}",
+        "Payload": {
+          "tenant_id.$": "$.tenant_id",
+          "decision_id.$": "$.planner_output.decision.decision_id",
+          "approval.$": "$.approval_result",
+          "plan.$": "$.planner_output.decision"
+        }
+      },
+      "ResultPath": "$.dispatch_result",
+      "Next": "AuditCloseApproved"
+    },
+    "FailSafeNoBroadcast": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${AuditFunctionArn}",
+        "Payload": {
+          "tenant_id.$": "$.tenant_id",
+          "event": "FAILSAFE_TIMEOUT_NO_BROADCAST",
+          "reason": "Approval timed out after escalation; safe state preserved"
+        }
+      },
+      "End": true
+    },
+    "AuditCloseNoChange": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${AuditFunctionArn}",
+        "Payload": {
+          "tenant_id.$": "$.tenant_id",
+          "event": "RUN_CLOSED_NO_CHANGE"
+        }
+      },
+      "End": true
+    },
+    "AuditCloseApproved": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${AuditFunctionArn}",
+        "Payload": {
+          "tenant_id.$": "$.tenant_id",
+          "event": "RUN_CLOSED_APPROVED_AND_NOTIFIED",
+          "dispatch.$": "$.dispatch_result"
+        }
+      },
+      "End": true
+    }
+  }
+}
