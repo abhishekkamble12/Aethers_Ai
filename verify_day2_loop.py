@@ -6,6 +6,7 @@ Bilingual Notice Drafting -> WhatsApp Share Links -> Teacher Schedules ->
 Rule-Diff with Quotes -> Hash-Chained Audit Trail
 """
 
+import sys
 import json
 from services.planner.csv_loader import load_timetable_csv
 from services.planner.planner import plan_schedule
@@ -16,6 +17,8 @@ from services.notify.drafting import generate_parent_broadcast_package
 from services.audit.hash_chain import GENESIS_HASH, create_audit_row, verify_audit_chain
 
 def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     print("=" * 80)
     print("SAANS: THE REAL LOOP (DAY 2 GATE DEMONSTRATION)")
     print("=" * 80)

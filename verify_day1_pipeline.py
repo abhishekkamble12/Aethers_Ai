@@ -4,6 +4,7 @@ Executes the full pipeline locally:
 Ingest -> Rules Classification -> Planner (Plan A & B) -> Hash Chain Audit -> Refusal Drill
 """
 
+import sys
 import json
 from services.planner.csv_loader import load_timetable_csv
 from services.planner.planner import plan_schedule
@@ -12,6 +13,8 @@ from services.audit.hash_chain import GENESIS_HASH, create_audit_row, verify_aud
 from services.circular.validator import validate_ruleset_candidates
 
 def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     print("=" * 75)
     print("SAANS: END-TO-END PIPELINE VERIFICATION (DAY 1 GATE)")
     print("=" * 75)

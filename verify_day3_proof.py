@@ -12,6 +12,7 @@ Executes and demonstrates the Day 3 Gate:
 9. P2 Feature: 1,000 Synthetic Tenants Scalability Benchmark
 """
 
+import sys
 import json
 from services.circular.eval_runner import run_gold_evaluation
 from services.drills.drills_simulator import FailureDrillsSimulator
@@ -21,6 +22,8 @@ from services.planner.standing_order import StandingOrderManager
 from services.drills.tenant_scale_sim import simulate_1000_tenants_scaling
 
 def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     print("=" * 80)
     print("SAANS: PROOF, DRILLS & FREEZE (DAY 3 GATE DEMONSTRATION)")
     print("=" * 80)
