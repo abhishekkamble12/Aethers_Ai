@@ -10,6 +10,9 @@ import sys
 import unittest
 
 def run_tests():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
 
@@ -25,9 +28,9 @@ def run_tests():
     
     print("\n" + "=" * 70)
     if result.wasSuccessful():
-        print(f"✅ ALL {result.testsRun} TESTS PASSED! GATES ARE GREEN.")
+        print(f"[PASS] ALL {result.testsRun} TESTS PASSED! GATES ARE GREEN.")
     else:
-        print(f"❌ {len(result.failures)} FAILURES, {len(result.errors)} ERRORS out of {result.testsRun} tests.")
+        print(f"[FAIL] {len(result.failures)} FAILURES, {len(result.errors)} ERRORS out of {result.testsRun} tests.")
     print("=" * 70)
 
     return 0 if result.wasSuccessful() else 1

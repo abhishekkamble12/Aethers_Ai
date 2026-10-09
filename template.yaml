@@ -1,0 +1,156 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Saans - Air-Safety School Day Planner Infrastructure (Environmental Hacks 2026)
+
+Globals:
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,OPTIONS'"
+      AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Telegram-Bot-Api-Secret-Token'"
+      AllowOrigin: "'*'"
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: python3.11
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref SaansTable
+        APP_REGION: !Ref "AWS::Region"
+        DELHI_STAGE_DEFAULT: "III"
+
+Resources:
+  # 1. DynamoDB Single Table
+  SaansTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: SaansStateTable
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  # 2. Dead-Letter Queue for Failed Notifications
+  SaansNotificationDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: SaansNotificationDLQ.fifo
+      FifoQueue: true
+      ContentBasedDeduplication: true
+      MessageRetentionPeriod: 1209600 # 14 days
+
+  # 3. Ingest and Planner Lambda Function
+  IngestPlannerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handler.lambda_handler
+      CodeUri: ../services/planner/
+      Description: Scheduled or on-demand runner that classifies periods and generates Plan A/B
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SaansTable
+      Events:
+        ScheduledTrigger:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 14 * * ? *) # 19:30 IST evening run
+            Name: SaansEveningPlannerSchedule
+            Description: Daily evening tentative schedule re-plan trigger
+            Enabled: true
+
+  # 4. Stage Rehearsal Lambda Function (Powers the interactive slider)
+  RehearseFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handler.rehearse_handler
+      CodeUri: ../services/planner/
+      Description: Instant re-plan simulator for Stage I-IV rehearsal slider
+      Events:
+        RehearseApi:
+          Type: Api
+          Properties:
+            Path: /rehearse
+            Method: post
+
+  # 5. Approvals and Callback Handler
+  ApprovalFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handler.approval_handler
+      CodeUri: ../services/workflow/
+      Description: Handles principal approval/rejection callbacks
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SaansTable
+      Events:
+        ApproveApi:
+          Type: Api
+          Properties:
+            Path: /approve/{shortId}
+            Method: post
+
+  # 6. Public Receipt Verification API
+  ReceiptVerifyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handler.receipt_handler
+      CodeUri: ../services/audit/
+      Description: Returns privacy-filtered audit trail for in-browser cryptographic verification
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref SaansTable
+      Events:
+        ReceiptApi:
+          Type: Api
+          Properties:
+            Path: /receipts/{id}
+            Method: get
+
+  # 7. Bilingual Notification & WhatsApp Dispatch Function
+  NotificationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handler.notify_handler
+      CodeUri: ../services/notify/
+      Description: Drafts bilingual safety notices with Bedrock/template fallback and WhatsApp link builder
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SaansTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt SaansNotificationDLQ.QueueName
+      Events:
+        NotifyApi:
+          Type: Api
+          Properties:
+            Path: /notifications/dispatch
+            Method: post
+
+Outputs:
+  SaansTableArn:
+    Description: DynamoDB Single Table ARN
+    Value: !GetAtt SaansTable.Arn
+  ApiUrl:
+    Description: Base API URL
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+
