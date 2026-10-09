@@ -1,7 +1,7 @@
 """
-1,000 Synthetic Tenants Scalability Simulator (Day 3 P2 Item)
-Measures throughput, partition isolation, and latency for 1,000 synthetic Delhi-NCR schools
-executing morning planning under DynamoDB Single-Table partitioning.
+1,000 Synthetic Tenants Partition Key & Scalability Simulator (Day 3 P2 Item)
+Measures key generation throughput, partition isolation, and simulated planning latency
+for 1,000 synthetic Delhi-NCR schools under DynamoDB Single-Table partitioning.
 """
 
 import time

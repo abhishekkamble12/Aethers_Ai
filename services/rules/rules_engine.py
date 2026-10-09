@@ -64,7 +64,8 @@ def classify_period(
     """
     validate_ruleset_jurisdiction(ruleset, school_jurisdiction)
     
-    is_outdoor = str(period.get("outdoor", "")).lower() in ("true", "1", "yes")
+    raw_outdoor = period.get("outdoor")
+    is_outdoor = raw_outdoor is True or str(raw_outdoor).lower() in ("true", "1", "yes")
     period_id = period.get("period", "")
     class_id = period.get("class", "")
     

@@ -106,8 +106,11 @@
     <section class="card" style="margin-bottom: 24px;">
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
         <div>
-          <h3>Participating Delhi-NCR Institutions</h3>
-          <p class="card-desc">Inspect real-time compliance status, plan approvals, and verified hash chains.</p>
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 4px;">
+            <h3 style="margin: 0;">Participating Delhi-NCR Institutions</h3>
+            <span class="badge badge-cyan" id="schoolsShowingBadge">Showing 16 of 1,000 Verified Campuses</span>
+          </div>
+          <p class="card-desc">Inspect real-time compliance status, plan approvals, and verified hash chains across 11 Delhi revenue districts.</p>
         </div>
         <div style="display: flex; gap: 12px;">
           <input type="text" id="schoolSearch" placeholder="Search school name or zone..." style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 8px 14px; color: #fff; font-family: var(--font-sans); width: 260px;">
@@ -128,12 +131,22 @@
 
   <script>
     const SAMPLE_SCHOOLS = [
-      { id: "T-101", name: "Delhi Public School, R.K. Puram", zone: "South Delhi", status: "APPROVED_PLAN_B", pePreserved: "100%", students: 3200, headHash: "9a81f3..." },
-      { id: "T-102", name: "Modern School, Barakhamba Road", zone: "Central Delhi", status: "APPROVED_PLAN_B", pePreserved: "100%", students: 2800, headHash: "4b77d1..." },
-      { id: "T-103", name: "Springdales School, Dhaula Kuan", zone: "South West Delhi", status: "APPROVED_PLAN_A", pePreserved: "100%", students: 2400, headHash: "88c21a..." },
-      { id: "T-104", name: "Delhi Public Academy", zone: "East Delhi", status: "APPROVED_PLAN_B", pePreserved: "100%", students: 1850, headHash: "3b9a78..." },
-      { id: "T-105", name: "The Mother's International School", zone: "South Delhi", status: "APPROVED_PLAN_B", pePreserved: "100%", students: 2100, headHash: "7f44d9..." },
-      { id: "T-106", name: "Sanskriti School, Chanakyapuri", zone: "New Delhi", status: "STANDING_ORDER_AUTO", pePreserved: "100%", students: 2600, headHash: "1e55b0..." }
+      { id: "T-101", name: "Delhi Public School, R.K. Puram", zone: "South Delhi", status: "APPROVED_PLAN_B", pePreserved: "100%", students: 3200, headHash: "9a81f3b2e4c1" },
+      { id: "T-102", name: "Modern School, Barakhamba Road", zone: "Central Delhi", status: "APPROVED_PLAN_B", pePreserved: "100%", students: 2800, headHash: "4b77d1a980c5" },
+      { id: "T-103", name: "Springdales School, Dhaula Kuan", zone: "South West Delhi", status: "APPROVED_PLAN_A", pePreserved: "100%", students: 2400, headHash: "88c21a3f019b" },
+      { id: "T-104", name: "Delhi Public Academy, Preet Vihar", zone: "East Delhi", status: "APPROVED_PLAN_B", pePreserved: "100%", students: 1850, headHash: "3b9a78de24a6" },
+      { id: "T-105", name: "The Mother's International School", zone: "South Delhi", status: "APPROVED_PLAN_B", pePreserved: "100%", students: 2100, headHash: "7f44d909ca33" },
+      { id: "T-106", name: "Sanskriti School, Chanakyapuri", zone: "New Delhi", status: "STANDING_ORDER_AUTO", pePreserved: "100%", students: 2600, headHash: "1e55b08477ff" },
+      { id: "T-107", name: "Mount Carmel School, Anand Niketan", zone: "South West Delhi", status: "APPROVED_PLAN_A", pePreserved: "100%", students: 1950, headHash: "a12bc9048ef1" },
+      { id: "T-108", name: "St. Xavier's Senior Secondary, Raj Niwas Marg", zone: "North Delhi", status: "APPROVED_PLAN_B", pePreserved: "100%", students: 2300, headHash: "5f8841cde021" },
+      { id: "T-109", name: "Amity International School, Saket", zone: "South Delhi", status: "APPROVED_PLAN_B", pePreserved: "100%", students: 2500, headHash: "8b74a2119cf2" },
+      { id: "T-110", name: "Bal Bharati Public School, Ganga Ram Hospital Marg", zone: "Central Delhi", status: "STANDING_ORDER_AUTO", pePreserved: "100%", students: 3100, headHash: "33fe884a1290" },
+      { id: "T-111", name: "The Shri Ram School, Vasant Vihar", zone: "South Delhi", status: "APPROVED_PLAN_A", pePreserved: "100%", students: 1600, headHash: "90ca28384f1a" },
+      { id: "T-112", name: "Army Public School, Shankar Vihar", zone: "South West Delhi", status: "APPROVED_PLAN_B", pePreserved: "100%", students: 2900, headHash: "77aa33b110ce" },
+      { id: "T-113", name: "Ahlcon International School, Mayur Vihar", zone: "East Delhi", status: "APPROVED_PLAN_B", pePreserved: "100%", students: 2200, headHash: "44cb9011ee47" },
+      { id: "T-114", name: "DAV Public School, Rohini Sector 7", zone: "North West Delhi", status: "APPROVED_PLAN_B", pePreserved: "100%", students: 2750, headHash: "66e1472288ab" },
+      { id: "T-115", name: "Tagore International School, Vasant Vihar", zone: "South Delhi", status: "APPROVED_PLAN_A", pePreserved: "100%", students: 1750, headHash: "19ad44ff3201" },
+      { id: "T-116", name: "DPS International, Pushp Vihar", zone: "South Delhi", status: "STANDING_ORDER_AUTO", pePreserved: "100%", students: 1900, headHash: "99de44512bce" }
     ];
 
     function renderSchools() {
@@ -142,6 +155,10 @@
       container.innerHTML = "";
 
       const filtered = SAMPLE_SCHOOLS.filter(s => s.name.toLowerCase().includes(search) || s.zone.toLowerCase().includes(search));
+      const badge = document.getElementById("schoolsShowingBadge");
+      if (badge) {
+        badge.innerText = `Showing ${filtered.length} of 1,000 Verified Campuses`;
+      }
 
       filtered.forEach(s => {
         const card = document.createElement("div");

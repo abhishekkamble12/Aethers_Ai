@@ -147,7 +147,11 @@ def plan_schedule(
     # Count scheduled PE minutes
     original_pe_minutes = sum(
         calculate_duration_minutes(p.get("start", ""), p.get("end", ""))
-        for p in timetable if "pe" in p.get("subject", "").lower() or "physical education" in p.get("subject", "").lower()
+        for p in timetable
+        if "pe" in p.get("subject", "").lower()
+        or "physical education" in p.get("subject", "").lower()
+        or "pt" in p.get("subject", "").lower()
+        or bool(p.get("outdoor"))
     )
 
     # 3. Check for need to move
@@ -320,9 +324,28 @@ def plan_schedule(
         red_pct = round(((exp_before_nom - exp_after_nom) / exp_before_nom) * 100.0, 1)
 
     # Calculate preserved PE minutes:
-    # All PE periods either successfully swapped into safe outdoor slots or converted to indoor sessions
-    preserved_minutes = original_pe_minutes # Because all unswapped PE periods were converted to Plan B indoor activities!
-    pe_preserved_pct = 100.0 if original_pe_minutes > 0 else 100.0
+    # All PE periods either successfully swapped into safe outdoor slots, converted to indoor sessions, or already compliant
+    swapped_minutes = sum(
+        calculate_duration_minutes(
+            next((p["start"] for p in timetable if p["class"] == s["class"] and p["period"] == s["from_period"]), ""),
+            next((p["end"] for p in timetable if p["class"] == s["class"] and p["period"] == s["from_period"]), "")
+        )
+        for s in plan_a_swaps
+    )
+    fallback_minutes = sum(
+        fb.get("duration_minutes", 0) for fb in plan_b_fallbacks
+    )
+    unaffected_pe_minutes = sum(
+        calculate_duration_minutes(p.get("start", ""), p.get("end", ""))
+        for p in timetable
+        if ("pe" in p.get("subject", "").lower()
+            or "physical education" in p.get("subject", "").lower()
+            or "pt" in p.get("subject", "").lower()
+            or bool(p.get("outdoor")))
+        and not any(bad["class"] == p["class"] and bad["period"] == p["period"] for bad in problematic_periods)
+    )
+    total_preserved_minutes = unaffected_pe_minutes + swapped_minutes + fallback_minutes
+    pe_preserved_pct = round((total_preserved_minutes / original_pe_minutes) * 100.0, 1) if original_pe_minutes > 0 else 100.0
 
     return {
         "decision_id": decision_id,
