@@ -27,7 +27,7 @@ const STAGES = {
   4: { name: "Stage IV", stageCode: "IV", aqi: "Severe+ (>450)", outdoorAllowed: false, reason: "Stage IV Order: School hybrid mode invoked. Absolute outdoor ban." }
 };
 
-// Cryptographic Audit Log Initial Chain (Local or Hydrated from GET /receipts/{id})
+// Cryptographic Audit Log Initial Chain
 let auditChain = [
   {
     seq: 1,
@@ -58,12 +58,11 @@ let auditChain = [
   }
 ];
 
-// Cryptographic Utilities (WebCrypto SHA-256 Parity with Python hash_chain.py)
 function canonicalJson(obj) {
   const keys = Object.keys(obj).sort();
   const sortedObj = {};
   for (const k of keys) sortedObj[k] = obj[k];
-  return JSON.stringify(sortedObj); // Compact JSON matching json.dumps(separators=(',', ':'))
+  return JSON.stringify(sortedObj);
 }
 
 async function sha256Hex(str) {
@@ -74,7 +73,6 @@ async function sha256Hex(str) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Live API Rehearsal Fetcher (POST /rehearse)
 async function fetchRehearsalFromApi(stageCode) {
   if (!API_BASE) return null;
   try {
@@ -86,31 +84,16 @@ async function fetchRehearsalFromApi(stageCode) {
     if (!res.ok) return null;
     return await res.json();
   } catch (err) {
-    console.warn("API Gateway offline or unreachable. Falling back to local simulation mode.", err);
+    console.warn("API Gateway offline. Falling back to local mode.", err);
     return null;
   }
 }
 
-// Live Receipt Audit Fetcher (GET /receipts/{id})
-async function fetchReceiptFromApi(receiptId = "demo") {
-  if (!API_BASE) return null;
-  try {
-    const res = await fetch(`${API_BASE}/receipts/${receiptId}`);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch (err) {
-    console.warn("Failed to fetch receipt from API Gateway.", err);
-    return null;
-  }
-}
-
-// Recompute Hash Chain in Browser using WebCrypto API
 async function verifyAuditChainInBrowser() {
   const statusEl = document.getElementById("kpiAuditStatus");
   if (!statusEl) return;
   
   statusEl.textContent = "⌛ Recomputing SHA-256 chain...";
-
   let prev = "0000000000000000000000000000000000000000000000000000000000000000";
   let intact = true;
 
@@ -146,22 +129,18 @@ async function verifyAuditChainInBrowser() {
   renderAuditLog();
 }
 
-// Render Timetable Grid (Supports API Response or Offline Fallback)
 async function renderSchedule(stageNum) {
   const stageInfo = STAGES[stageNum];
   const tbody = document.getElementById("scheduleTableBody");
   if (!tbody) return;
   
   tbody.innerHTML = "";
-
   document.getElementById("kpiStage").textContent = stageInfo.name;
   document.getElementById("briefReasonLine").textContent = stageInfo.reason;
 
-  // Attempt Live API Call
   const apiData = await fetchRehearsalFromApi(stageInfo.stageCode);
 
   if (apiData) {
-    // Render using live API Gateway response
     document.getElementById("kpiExposureAvoided").textContent = `${apiData.exposure_reduction_pct || 0}%`;
     document.getElementById("kpiPePreserved").textContent = `${apiData.pe_minutes_preserved || 100}%`;
 
@@ -203,7 +182,6 @@ async function renderSchedule(stageNum) {
       tbody.appendChild(tr);
     });
   } else {
-    // Offline / Demo Fallback Mode
     if (stageNum === 1) {
       document.getElementById("kpiExposureAvoided").textContent = "0.0%";
       document.getElementById("kpiPePreserved").textContent = "100%";
@@ -259,7 +237,6 @@ async function renderSchedule(stageNum) {
   }
 }
 
-// Render Audit Logs List
 function renderAuditLog() {
   const container = document.getElementById("auditLogContainer");
   if (!container) return;
@@ -283,7 +260,6 @@ function renderAuditLog() {
   });
 }
 
-// Document Ready Initialization & Event Wiring
 document.addEventListener("DOMContentLoaded", () => {
   const slider = document.getElementById("stageSlider");
   const stageLabels = document.querySelectorAll(".stage-label");
@@ -357,14 +333,186 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  const btnVerifyChain = document.getElementById("btnVerifyChain");
-  if (btnVerifyChain) {
-    btnVerifyChain.addEventListener("click", () => {
-      verifyAuditChainInBrowser();
+  // Air Monitors Modal Handlers
+  const navAirMonitors = document.getElementById("navAirMonitors");
+  const monitorsModal = document.getElementById("monitorsModal");
+  const btnCloseMonitors = document.getElementById("btnCloseMonitors");
+
+  if (navAirMonitors && monitorsModal) {
+    navAirMonitors.addEventListener("click", () => {
+      monitorsModal.classList.add("active");
     });
   }
 
+  if (btnCloseMonitors && monitorsModal) {
+    btnCloseMonitors.addEventListener("click", () => {
+      monitorsModal.classList.remove("active");
+    });
+  }
+
+  if (monitorsModal) {
+    monitorsModal.addEventListener("click", (e) => {
+      if (e.target === monitorsModal) {
+        monitorsModal.classList.remove("active");
+      }
+    });
+  }
+
+  // 3D Interactive Globe Drag-to-Rotate & Zoom Engine
+  const globeSphere = document.getElementById("globeSphere");
+  const globeViewport = document.getElementById("globeViewport");
+  const coordReadout = document.getElementById("coordReadout");
+  const btnZoomIn = document.getElementById("btnZoomIn");
+  const btnZoomOut = document.getElementById("btnZoomOut");
+
+  let isDragging = false;
+  let startX = 0;
+  let startY = 0;
+  let rotX = -10;
+  let rotY = 25;
+  let currentZoom = 1.0;
+
+  function updateGlobeTransform() {
+    if (!globeSphere) return;
+    globeSphere.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg) scale(${currentZoom})`;
+    if (coordReadout) {
+      const lat = (28.6139 + rotX * 0.1).toFixed(4);
+      const lng = (77.2090 + rotY * 0.1).toFixed(4);
+      coordReadout.textContent = `X: ${lat} · Y: ${lng}`;
+    }
+  }
+
+  if (globeViewport) {
+    globeViewport.addEventListener("mousedown", (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (!isDragging) return;
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      rotY += deltaX * 0.4;
+      rotX -= deltaY * 0.4;
+      rotX = Math.max(-60, Math.min(60, rotX));
+      startX = e.clientX;
+      startY = e.clientY;
+      updateGlobeTransform();
+    });
+
+    window.addEventListener("mouseup", () => {
+      isDragging = false;
+    });
+
+    // Mouse Wheel Zoom
+    globeViewport.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      if (e.deltaY < 0) {
+        currentZoom = Math.min(2.5, currentZoom + 0.15);
+      } else {
+        currentZoom = Math.max(0.7, currentZoom - 0.15);
+      }
+      updateGlobeTransform();
+    }, { passive: false });
+  }
+
+  if (btnZoomIn) {
+    btnZoomIn.addEventListener("click", () => {
+      currentZoom = Math.min(2.5, currentZoom + 0.2);
+      updateGlobeTransform();
+    });
+  }
+
+  if (btnZoomOut) {
+    btnZoomOut.addEventListener("click", () => {
+      currentZoom = Math.max(0.7, currentZoom - 0.2);
+      updateGlobeTransform();
+    });
+  }
+
+  // Location Selector Tabs Handler
+  const locationData = {
+    pinDelhi: {
+      title: "📍 Central Delhi, India Air Quality Details",
+      aqi: "412 Severe",
+      aqiNum: 412,
+      status: "Unhealthy for all groups",
+      temp: "☀️ 34°C",
+      humidity: "💧 50%",
+      wind: "💨 13.2 km/h",
+      rotX: -10, rotY: 25
+    },
+    pinNoida: {
+      title: "📍 Noida Sector 62 Air Quality Details",
+      aqi: "380 Very Poor",
+      aqiNum: 380,
+      status: "Unhealthy for sensitive groups",
+      temp: "☀️ 33°C",
+      humidity: "💧 54%",
+      wind: "💨 11.5 km/h",
+      rotX: -5, rotY: 45
+    },
+    pinGurgaon: {
+      title: "📍 Gurgaon Vikas Sadan Air Quality Details",
+      aqi: "360 Very Poor",
+      aqiNum: 360,
+      status: "Unhealthy for sensitive groups",
+      temp: "☀️ 35°C",
+      humidity: "💧 48%",
+      wind: "💨 14.0 km/h",
+      rotX: -15, rotY: 10
+    },
+    pinGhaziabad: {
+      title: "📍 Ghaziabad Vasundhara Air Quality Details",
+      aqi: "425 Severe",
+      aqiNum: 425,
+      status: "Emergency Air Level",
+      temp: "☀️ 32°C",
+      humidity: "💧 58%",
+      wind: "💨 10.2 km/h",
+      rotX: 5, rotY: 55
+    },
+    pinFaridabad: {
+      title: "📍 Faridabad Sector 16A Air Quality Details",
+      aqi: "340 Very Poor",
+      aqiNum: 340,
+      status: "Unhealthy for sensitive groups",
+      temp: "☀️ 34°C",
+      humidity: "💧 52%",
+      wind: "💨 12.8 km/h",
+      rotX: -25, rotY: 30
+    }
+  };
+
+  const locationTabs = document.querySelectorAll(".location-tab");
+  locationTabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      locationTabs.forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+
+      const locKey = tab.dataset.loc;
+      const data = locationData[locKey];
+      if (data) {
+        document.getElementById("popupLocationTitle").textContent = data.title;
+        document.getElementById("popupAqiBadge").textContent = data.aqi;
+        document.getElementById("popupStatusText").textContent = data.status;
+        document.getElementById("popupTemp").textContent = data.temp;
+        document.getElementById("popupHumidity").textContent = data.humidity;
+        document.getElementById("popupWind").textContent = data.wind;
+
+        const mainAqiNum = document.getElementById("mainAqiNum");
+        if (mainAqiNum) mainAqiNum.textContent = data.aqiNum;
+
+        rotX = data.rotX;
+        rotY = data.rotY;
+        updateGlobeTransform();
+      }
+    });
+  });
+
   // Initial Render & Verification
   updateSlider(3);
+  updateGlobeTransform();
   verifyAuditChainInBrowser();
 });

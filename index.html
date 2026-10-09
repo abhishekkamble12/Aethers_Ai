@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Saans · Air Quality Index & School Day Planner</title>
+  <meta name="description" content="Saans AI Air Quality Index and Air-Safety School Day Planner dashboard for Delhi-NCR.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=5">
+  <style>
+    /* Global Anchor Reset */
+    a, a:visited, a:hover, a:active {
+      text-decoration: none !important;
+    }
+
+    body {
+      background-color: #070913;
+      background-image: 
+        radial-gradient(at 20% 20%, rgba(30, 41, 89, 0.4) 0px, transparent 50%),
+        radial-gradient(at 80% 80%, rgba(15, 23, 42, 0.9) 0px, transparent 50%),
+        linear-gradient(180deg, #070913 0%, #05070e 100%);
+      color: #f8fafc;
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    }
+
+    /* Top Navigation Bar matching Image 3 */
+    .nav-header {
+      padding: 18px 40px !important;
+      display: flex !important;
+      justify-content: space-between !important;
+      align-items: center !important;
+      background: rgba(11, 15, 26, 0.95) !important;
+      backdrop-filter: blur(20px) !important;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+      position: sticky !important;
+      top: 0 !important;
+      z-index: 100 !important;
+      width: 100% !important;
+    }
+
+    .nav-left {
+      display: flex !important;
+      align-items: center !important;
+      gap: 28px !important;
+    }
+
+    .nav-right {
+      display: flex !important;
+      align-items: center !important;
+      gap: 24px !important;
+    }
+
+    .nav-link, a.nav-link, a.nav-link:visited {
+      color: #94a3b8 !important;
+      text-decoration: none !important;
+      font-size: 0.88rem !important;
+      font-weight: 500 !important;
+      transition: color 0.2s !important;
+      cursor: pointer;
+    }
+
+    .nav-link:hover, .nav-link.active, a.nav-link.active:visited {
+      color: #ffffff !important;
+      text-decoration: none !important;
+    }
+
+    .nav-brand, a.nav-brand, a.nav-brand:visited {
+      display: flex !important;
+      align-items: center !important;
+      gap: 10px !important;
+      font-size: 1.35rem !important;
+      font-weight: 800 !important;
+      color: #ffffff !important;
+      letter-spacing: -0.02em !important;
+      text-decoration: none !important;
+    }
+
+    .nav-brand-icon {
+      width: 28px !important;
+      height: 28px !important;
+      background: linear-gradient(135deg, #38bdf8, #818cf8) !important;
+      border-radius: 50% !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      color: #ffffff !important;
+      font-size: 0.9rem !important;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.6) !important;
+    }
+
+    .btn-get-started, a.btn-get-started, a.btn-get-started:visited {
+      background: #ffffff !important;
+      color: #0f172a !important;
+      padding: 9px 22px !important;
+      border-radius: 999px !important;
+      font-weight: 700 !important;
+      font-size: 0.85rem !important;
+      text-decoration: none !important;
+      transition: all 0.2s ease !important;
+      box-shadow: 0 2px 10px rgba(255, 255, 255, 0.2) !important;
+    }
+
+    .btn-get-started:hover {
+      background: #f1f5f9 !important;
+      transform: translateY(-1px) !important;
+      box-shadow: 0 4px 16px rgba(255, 255, 255, 0.35) !important;
+    }
+
+    /* Main Dashboard Layout matching Image 3 */
+    .dashboard-container {
+      max-width: 1440px;
+      margin: 32px auto;
+      padding: 0 32px;
+      display: grid;
+      grid-template-columns: 460px 1fr;
+      gap: 36px;
+    }
+
+    .dashboard-title {
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: #ffffff;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+    }
+
+    .dashboard-title span {
+      color: #64748b;
+      font-weight: 400;
+    }
+
+    .dashboard-meta {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin: 8px 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .air-card {
+      background: rgba(19, 26, 45, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 24px;
+      backdrop-filter: blur(16px);
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    .air-card-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      margin-bottom: 12px;
+    }
+
+    .aqi-number {
+      font-size: 3.2rem;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1;
+      letter-spacing: -0.04em;
+    }
+
+    .aqi-meta {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-top: 10px;
+    }
+
+    /* Image 2 Minimalist Line Icons Circular Badges Grid */
+    .icons-badge-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-top: 20px;
+    }
+
+    .icon-badge-item {
+      background: #ffffff;
+      border-radius: 50%;
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      transition: transform 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+    }
+
+    .icon-badge-item:hover {
+      transform: translateY(-3px) scale(1.05);
+      box-shadow: 0 8px 20px rgba(255, 255, 255, 0.25);
+    }
+
+    .icon-badge-item svg {
+      width: 28px;
+      height: 28px;
+      stroke: #0f172a;
+      stroke-width: 2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .risk-card {
+      background: linear-gradient(135deg, rgba(30, 41, 89, 0.6), rgba(15, 23, 42, 0.8));
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      border-radius: 20px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .risk-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .risk-badge-btn {
+      background: #eab308;
+      color: #0f172a;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+    }
+
+    .risk-percentage {
+      font-size: 2.4rem;
+      font-weight: 800;
+      color: #ffffff;
+      margin: 8px 0 4px;
+    }
+
+    .risk-desc {
+      font-size: 0.85rem;
+      color: #94a3b8;
+    }
+
+    /* Photorealistic 3D Earth Globe Panel with Large Scaled Interactive Globe */
+    .globe-panel {
+      background: radial-gradient(circle at 50% 50%, rgba(26, 35, 71, 0.85) 0%, rgba(10, 14, 26, 0.98) 75%);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 24px;
+      position: relative;
+      min-height: 720px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 24px;
+      user-select: none;
+    }
+
+    .globe-header-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 20;
+      position: relative;
+    }
+
+    .location-selector {
+      display: flex;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.85);
+      padding: 4px 6px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .location-tab {
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #94a3b8;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .location-tab.active {
+      background: #2563eb;
+      color: #ffffff;
+      box-shadow: 0 2px 10px rgba(37, 99, 235, 0.4);
+    }
+
+    .globe-viewport {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: grab;
+      overflow: hidden;
+    }
+
+    .globe-viewport:active {
+      cursor: grabbing;
+    }
+
+    /* Scaled Up 3D Earth Globe Sphere */
+    .globe-sphere {
+      width: 660px;
+      height: 660px;
+      border-radius: 50%;
+      background: url('earth_globe.jpg') center/cover no-repeat;
+      box-shadow: 
+        0 0 80px rgba(56, 189, 248, 0.45),
+        inset -35px -35px 80px rgba(0, 0, 0, 0.9),
+        inset 20px 20px 45px rgba(255, 255, 255, 0.3);
+      position: relative;
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      transform-style: preserve-3d;
+      transition: transform 0.05s ease-out;
+      will-change: transform;
+    }
+
+    /* Floating Details Popup matching Image 3 */
+    .globe-popup {
+      position: absolute;
+      top: 18%;
+      right: 5%;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 18px;
+      padding: 20px 24px;
+      width: 310px;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(18px);
+      z-index: 30;
+      pointer-events: auto;
+      transition: all 0.3s ease;
+    }
+
+    .popup-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.78rem;
+      color: #94a3b8;
+      margin-bottom: 8px;
+    }
+
+    .popup-badge-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .popup-aqi-tag {
+      background: #ef4444;
+      color: #ffffff;
+      font-size: 0.8rem;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+
+    .popup-status-text {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .popup-weather-stats {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 0.8rem;
+      color: #cbd5e1;
+    }
+
+    .globe-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: relative;
+      z-index: 20;
+    }
+
+    .btn-toggle-group {
+      display: flex;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      padding: 4px;
+    }
+
+    .btn-toggle {
+      padding: 6px 16px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #94a3b8;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .btn-toggle.active {
+      background: #2563eb;
+      color: #ffffff;
+    }
+
+    .coordinates {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+
+    .zoom-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      padding: 4px 14px;
+      font-size: 0.78rem;
+      color: #94a3b8;
+    }
+
+    .btn-zoom {
+      background: none;
+      border: none;
+      color: #ffffff;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: background 0.2s;
+    }
+
+    .btn-zoom:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Air Monitors Modal Overlay */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(7, 9, 19, 0.85);
+      backdrop-filter: blur(16px);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .monitors-modal {
+      width: 100%;
+      max-width: 900px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 24px;
+      padding: 32px;
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.7);
+      max-height: 85vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .btn-close-modal {
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: #ffffff;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 1.1rem;
+    }
+
+    .monitors-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .station-card {
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 16px;
+      transition: border-color 0.2s;
+    }
+
+    .station-card:hover {
+      border-color: rgba(56, 189, 248, 0.4);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Bar matching Image 3 -->
+  <header class="nav-header">
+    <div class="nav-left">
+      <a href="index.html" class="nav-brand">
+        <div class="nav-brand-icon">✦</div>
+        Saans AI
+      </a>
+      <a href="index.html" class="nav-link active">Air Quality</a>
+      <a id="navAirMonitors" class="nav-link">Air Monitors 📡</a>
+      <a href="city_board.html" class="nav-link">City Board</a>
+      <a href="verify.html" class="nav-link">Cryptographic Proof</a>
+    </div>
+    <div class="nav-right">
+      <a href="#" class="nav-link">About</a>
+      <a href="#" class="nav-link">Technology</a>
+      <a href="login.html" class="nav-link" style="color: #60a5fa;">Principal Login</a>
+      <a href="login.html" class="btn-get-started">Get Started</a>
+    </div>
+  </header>
+
+  <!-- Main Dashboard Container -->
+  <main class="dashboard-container">
+
+    <!-- Left Stats Column -->
+    <section>
+      <h1 class="dashboard-title">Air Quality <span>Index</span></h1>
+      <div class="dashboard-meta">
+        <span>📅 25/07/2026 10:11</span>
+        <span>•</span>
+        <span>📍 Local ➔ Delhi-NCR (IND)</span>
+      </div>
+
+      <!-- Card 1: Main Statistics with Image 2 Line Icons -->
+      <div class="air-card">
+        <div class="air-card-title">Main Statistics</div>
+        <div class="aqi-number" id="mainAqiNum">412</div>
+        <div class="aqi-meta">Dominant Pollutant <strong style="color: #ef4444;">PM2.5</strong> — Wind 14 km/h</div>
+
+        <!-- Image 2 Weather Minimalist Line Icons Grid -->
+        <div class="icons-badge-grid" title="Environmental Weather & Pollutant Indicators">
+          <div class="icon-badge-item" title="Partly Cloudy / Solar Inversion">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+              <path d="M15.5 16.5A4.5 4.5 0 1 0 11 12c-2.48 0-4.5 2.02-4.5 4.5S8.52 21 11 21h4.5a3.5 3.5 0 0 0 0-7z"/>
+            </svg>
+          </div>
+          <div class="icon-badge-item" title="Rain Cloud / Acid Wash">
+            <svg viewBox="0 0 24 24">
+              <path d="M16 13a4 4 0 0 0-7.78-1.3A3.5 3.5 0 0 0 4.5 15h11a3.5 3.5 0 0 0 .5-7z"/>
+              <path d="M8 17v3M12 17v3M16 17v3"/>
+            </svg>
+          </div>
+          <div class="icon-badge-item" title="Cold Inversion / Hail">
+            <svg viewBox="0 0 24 24">
+              <path d="M16 13a4 4 0 0 0-7.78-1.3A3.5 3.5 0 0 0 4.5 15h11a3.5 3.5 0 0 0 .5-7z"/>
+              <circle cx="8" cy="18" r="1.5" fill="#0f172a"/>
+              <circle cx="12" cy="18" r="1.5" fill="#0f172a"/>
+              <circle cx="16" cy="18" r="1.5" fill="#0f172a"/>
+            </svg>
+          </div>
+          <div class="icon-badge-item" title="Night Inversion / Stagnant Air">
+            <svg viewBox="0 0 24 24">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+          </div>
+          <div class="icon-badge-item" title="PM2.5 / Smog Particle Hexagon">
+            <svg viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="4"/>
+              <path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83"/>
+            </svg>
+          </div>
+          <div class="icon-badge-item" title="Clear Sun / UV Radiation">
+            <svg viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="5"/>
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2: Risk of Pollution -->
+      <div class="risk-card">
+        <div class="risk-header">
+          <span style="font-size: 0.9rem; color: #cbd5e1; font-weight: 600;">Risk of Pollution</span>
+          <button class="risk-badge-btn" onclick="alert('GRAP Stage III Emergency Level: Severe air pollution risk.')">Details</button>
+        </div>
+        <div class="risk-percentage">85%</div>
+        <div class="risk-desc">High risk due to winter thermal inversion weather conditions</div>
+      </div>
+
+      <!-- Card 3: School Day Air-Safety Rehearsal & Planner -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h3>School Day Safety Re-Planner</h3>
+            <p class="card-desc">CAQM September 16 Directive: "Re-plan, don't cancel"</p>
+          </div>
+          <span class="pill pill-live" id="kpiAuditStatus">✓ Chain Verified</span>
+        </div>
+
+        <div class="slider-wrapper">
+          <div class="stage-labels">
+            <div class="stage-label" data-stage="I">Stage I<br><small>Poor</small></div>
+            <div class="stage-label" data-stage="II">Stage II<br><small>Very Poor</small></div>
+            <div class="stage-label active" data-stage="III">Stage III<br><small>Severe</small></div>
+            <div class="stage-label" data-stage="IV">Stage IV<br><small>Severe+</small></div>
+          </div>
+          <input type="range" min="1" max="4" value="3" class="stage-slider" id="stageSlider">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0;">
+          <div style="background: rgba(15,23,42,0.6); padding: 12px; border-radius: 12px; text-align: center;">
+            <span style="font-size: 0.75rem; color: #94a3b8;">Exposure Avoided</span>
+            <div style="font-size: 1.4rem; font-weight: 800; color: #38bdf8;" id="kpiExposureAvoided">61.2%</div>
+          </div>
+          <div style="background: rgba(15,23,42,0.6); padding: 12px; border-radius: 12px; text-align: center;">
+            <span style="font-size: 0.75rem; color: #94a3b8;">PE Preserved</span>
+            <div style="font-size: 1.4rem; font-weight: 800; color: #34d399;" id="kpiPePreserved">100%</div>
+          </div>
+        </div>
+
+        <p id="briefReasonLine" style="font-size: 0.85rem; color: #cbd5e1; margin-bottom: 14px;">
+          Stage III Directive (r-017): All outdoor sports and PT strictly suspended. Plan B active.
+        </p>
+
+        <div class="table-container" style="max-height: 280px; overflow-y: auto;">
+          <table class="schedule-table">
+            <thead>
+              <tr>
+                <th>Class</th>
+                <th>Period</th>
+                <th>Subject</th>
+                <th>PM2.5</th>
+                <th>Status</th>
+                <th>Re-Planned Action</th>
+              </tr>
+            </thead>
+            <tbody id="scheduleTableBody">
+              <!-- Rendered dynamically by app.js -->
+            </tbody>
+          </table>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 16px;">
+          <button class="btn btn-emerald" id="btnApproveA" style="flex: 1;">Approve Plan A (Swaps)</button>
+          <button class="btn btn-teal" id="btnApproveB" style="flex: 1;">Approve Plan B (Indoor)</button>
+        </div>
+      </div>
+
+      <div class="share-row">
+        <span>Share</span>
+        <a href="#" class="share-icon-btn" title="Facebook">f</a>
+        <a href="#" class="share-icon-btn" title="X (Twitter)">𝕏</a>
+        <a href="https://wa.me/?text=Saans%20Air-Day%20Receipt%20verified%3A%20https%3A%2F%2Fsaans.delhi.gov.in" target="_blank" class="share-icon-btn" title="WhatsApp">💬</a>
+      </div>
+
+    </section>
+
+    <!-- Right Panel: Photorealistic 3D Interactive Earth Globe Panel -->
+    <section class="globe-panel">
+
+      <!-- Header with Location Selector Pills -->
+      <div class="globe-header-bar">
+        <div class="location-selector">
+          <button class="location-tab active" data-loc="pinDelhi">Central Delhi</button>
+          <button class="location-tab" data-loc="pinNoida">Noida</button>
+          <button class="location-tab" data-loc="pinGurgaon">Gurgaon</button>
+          <button class="location-tab" data-loc="pinGhaziabad">Ghaziabad</button>
+          <button class="location-tab" data-loc="pinFaridabad">Faridabad</button>
+        </div>
+      </div>
+
+      <!-- Drag-to-Rotate 3D Interactive Globe Viewport (Clean Earth surface with NO dots!) -->
+      <div class="globe-viewport" id="globeViewport" title="Drag to rotate Earth globe in 3D, use mouse wheel or +/- to zoom!">
+        <div class="globe-sphere" id="globeSphere"></div>
+      </div>
+
+      <!-- Dynamic Location Details Popup matching Image 3 -->
+      <div class="globe-popup" id="globePopup">
+        <div class="popup-header">
+          <span id="popupLocationTitle">📍 Central Delhi, India Air Quality Details</span>
+        </div>
+        <div class="popup-badge-row">
+          <span class="popup-aqi-tag" id="popupAqiBadge">412 Severe</span>
+          <span class="popup-status-text" id="popupStatusText">Unhealthy for all groups</span>
+        </div>
+        <div class="popup-weather-stats">
+          <span id="popupTemp">☀️ 34°C</span>
+          <span id="popupHumidity">💧 50%</span>
+          <span id="popupWind">💨 13.2 km/h</span>
+        </div>
+      </div>
+
+      <!-- Bottom Control Bar matching Image 3 -->
+      <div class="globe-controls">
+        <div class="btn-toggle-group">
+          <button class="btn-toggle active">3D GLOBE</button>
+          <button class="btn-toggle" onclick="window.location.href='city_board.html'">IQ AIR MAP</button>
+        </div>
+
+        <div class="coordinates" id="coordReadout">
+          X: 28.6139 · Y: 77.2090
+        </div>
+
+        <div class="zoom-group">
+          <span>Zoom</span>
+          <button class="btn-zoom" id="btnZoomIn" title="Zoom In">+</button>
+          <button class="btn-zoom" id="btnZoomOut" title="Zoom Out">−</button>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Air Monitors Interactive Modal -->
+  <div class="modal-overlay" id="monitorsModal">
+    <div class="monitors-modal">
+      <div class="modal-header">
+        <div>
+          <h2 style="font-size: 1.4rem; color: #ffffff;">📡 Delhi-NCR Air Monitoring Stations</h2>
+          <p style="font-size: 0.85rem; color: #94a3b8;">Real-time feed from CPCB / CAQM Sensor Network</p>
+        </div>
+        <button class="btn-close-modal" id="btnCloseMonitors">✕</button>
+      </div>
+
+      <div class="monitors-grid">
+        <div class="station-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <strong style="color: #ffffff;">Mandir Marg (Central)</strong>
+            <span style="color: #34d399; font-size: 0.75rem;">🟢 ONLINE</span>
+          </div>
+          <div style="font-size: 1.8rem; font-weight: 800; color: #ef4444;">412 <small style="font-size: 0.8rem;">AQI</small></div>
+          <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 6px;">PM2.5: 285 µg/m³ · PM10: 410 µg/m³</div>
+        </div>
+
+        <div class="station-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <strong style="color: #ffffff;">R.K. Puram (South)</strong>
+            <span style="color: #34d399; font-size: 0.75rem;">🟢 ONLINE</span>
+          </div>
+          <div style="font-size: 1.8rem; font-weight: 800; color: #ef4444;">395 <small style="font-size: 0.8rem;">AQI</small></div>
+          <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 6px;">PM2.5: 260 µg/m³ · PM10: 380 µg/m³</div>
+        </div>
+
+        <div class="station-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <strong style="color: #ffffff;">Anand Vihar (East)</strong>
+            <span style="color: #34d399; font-size: 0.75rem;">🟢 ONLINE</span>
+          </div>
+          <div style="font-size: 1.8rem; font-weight: 800; color: #dc2626;">445 <small style="font-size: 0.8rem;">AQI</small></div>
+          <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 6px;">PM2.5: 340 µg/m³ · PM10: 480 µg/m³</div>
+        </div>
+
+        <div class="station-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <strong style="color: #ffffff;">Punjabi Bagh (West)</strong>
+            <span style="color: #34d399; font-size: 0.75rem;">🟢 ONLINE</span>
+          </div>
+          <div style="font-size: 1.8rem; font-weight: 800; color: #ef4444;">405 <small style="font-size: 0.8rem;">AQI</small></div>
+          <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 6px;">PM2.5: 275 µg/m³ · PM10: 395 µg/m³</div>
+        </div>
+
+        <div class="station-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <strong style="color: #ffffff;">Sector 62 (Noida)</strong>
+            <span style="color: #34d399; font-size: 0.75rem;">🟢 ONLINE</span>
+          </div>
+          <div style="font-size: 1.8rem; font-weight: 800; color: #eab308;">380 <small style="font-size: 0.8rem;">AQI</small></div>
+          <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 6px;">PM2.5: 240 µg/m³ · PM10: 350 µg/m³</div>
+        </div>
+
+        <div class="station-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <strong style="color: #ffffff;">Vikas Sadan (Gurgaon)</strong>
+            <span style="color: #34d399; font-size: 0.75rem;">🟢 ONLINE</span>
+          </div>
+          <div style="font-size: 1.8rem; font-weight: 800; color: #eab308;">360 <small style="font-size: 0.8rem;">AQI</small></div>
+          <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 6px;">PM2.5: 220 µg/m³ · PM10: 330 µg/m³</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="app-footer">
+    <p>Saans (साँस) · Reads the government order. Re-plans the day. Cryptographically proves it.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
