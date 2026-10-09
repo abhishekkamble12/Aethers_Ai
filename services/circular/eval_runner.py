@@ -107,12 +107,16 @@ def run_gold_evaluation() -> Dict[str, Any]:
     }
     hostile_run_result = validate_ruleset_candidates([hostile_dummy_rule], hostile_instruction_text)
 
-    # Metrics calculation
+    # Metrics calculation (Pipeline Quote-Verification Benchmark)
+    # Evaluates the deterministic quote-verification and anti-injection guardrail pipeline
+    # against gold-standard regulatory extracts. Confirms genuine rules pass verbatim
+    # quote extraction while adversarial injections and hallucinated quotes are rejected.
     total_gold_rules = len(school_rules)
     valid_extracted = len(school_run_result["valid_rules"])
     precision = (valid_extracted / total_gold_rules) * 100.0 if total_gold_rules else 0.0
-    recall = 100.0
-    quote_validity_rate = 100.0
+    recall = (valid_extracted / total_gold_rules) * 100.0 if total_gold_rules else 0.0
+    rejected_count = len(school_run_result.get("rejected_rules", []))
+    quote_validity_rate = ((total_gold_rules - rejected_count) / total_gold_rules) * 100.0 if total_gold_rules else 0.0
 
     hostile_injection_refused = (hostile_run_result["status"] == "refused" and hostile_run_result.get("refusal_type") == "hostile_injection")
     invented_quote_refused = (invented_run_result["status"] == "refused" and len(invented_run_result.get("rejected_rules", [])) > 0)

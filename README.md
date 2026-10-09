@@ -339,7 +339,7 @@ sam deploy --guided
 | :--- | :--- | :--- |
 | `TABLE_NAME` | DynamoDB Single-Table name | `SaansStateTable` |
 | `DELHI_STAGE_DEFAULT` | Default GRAP stage if unspecified | `III` |
-| `TELEGRAM_SECRET_TOKEN` | Webhook verification secret header | `saans-secure-grap-token-2026` |
+| `TELEGRAM_SECRET_TOKEN` | Webhook verification secret header | *None (Required for webhook validation)* |
 | `APP_REGION` | Target AWS deployment region | `ap-south-1` (Mumbai) |
 
 ---

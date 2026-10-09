@@ -18,7 +18,7 @@ ALLOWLISTED_APPROVERS = {
     "chat_id_987654321": "Principal Telegram"
 }
 
-TELEGRAM_SECRET_HEADER = os.environ.get("TELEGRAM_SECRET_TOKEN", "saans-secure-grap-token-2026")
+TELEGRAM_SECRET_HEADER = os.environ.get("TELEGRAM_SECRET_TOKEN", "")
 
 
 def approval_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -32,7 +32,8 @@ def approval_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     # 1. Telegram Webhook Secret Check (if applicable)
     telegram_token = headers.get("x-telegram-bot-api-secret-token") or headers.get("X-Telegram-Bot-Api-Secret-Token")
     if "update_id" in event: # Telegram payload
-        if telegram_token != TELEGRAM_SECRET_HEADER:
+        expected_token = os.environ.get("TELEGRAM_SECRET_TOKEN", TELEGRAM_SECRET_HEADER)
+        if not expected_token or telegram_token != expected_token:
             return {
                 "statusCode": 403,
                 "body": json.dumps({"error": "Unauthorized webhook token"})

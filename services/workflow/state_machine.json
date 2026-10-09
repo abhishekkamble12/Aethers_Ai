@@ -82,22 +82,43 @@
       "Type": "Choice",
       "Choices": [
         {
-          "Or": [
+          "And": [
             {
               "Variable": "$.approval_result.action",
-              "StringEquals": "APPROVE_PLAN_A"
+              "IsPresent": true
             },
             {
-              "Variable": "$.approval_result.action",
-              "StringEquals": "APPROVE_PLAN_B"
-            },
+              "Or": [
+                {
+                  "Variable": "$.approval_result.action",
+                  "StringEquals": "APPROVE_PLAN_A"
+                },
+                {
+                  "Variable": "$.approval_result.action",
+                  "StringEquals": "APPROVE_PLAN_B"
+                }
+              ]
+            }
+          ],
+          "Next": "DraftAndDispatchNotices"
+        },
+        {
+          "And": [
             {
               "Variable": "$.escalated_approval_result.action",
-              "StringEquals": "APPROVE_PLAN_A"
+              "IsPresent": true
             },
             {
-              "Variable": "$.escalated_approval_result.action",
-              "StringEquals": "APPROVE_PLAN_B"
+              "Or": [
+                {
+                  "Variable": "$.escalated_approval_result.action",
+                  "StringEquals": "APPROVE_PLAN_A"
+                },
+                {
+                  "Variable": "$.escalated_approval_result.action",
+                  "StringEquals": "APPROVE_PLAN_B"
+                }
+              ]
             }
           ],
           "Next": "DraftAndDispatchNotices"

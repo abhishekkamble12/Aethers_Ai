@@ -5,6 +5,7 @@ Ensures teachers never have to improvise at short notice when bad-air orders lan
 """
 
 from typing import List, Dict, Any
+from services.planner.planner import calculate_duration_minutes
 
 def generate_teacher_schedules(
     original_timetable: List[Dict[str, Any]],
@@ -35,9 +36,9 @@ def generate_teacher_schedules(
     """
     teacher_schedules: Dict[str, Dict[str, Any]] = {}
     
-    # Map swaps and fallbacks by (class, period)
-    swaps_from = {s["from_period"]: s for s in plan_result.get("plan_a", [])}
-    fallbacks = {f["period"]: f for f in plan_result.get("plan_b", [])}
+    # Map swaps and fallbacks by (class, period) to prevent cross-class collision
+    swaps_from = {(s["class"], s["from_period"]): s for s in plan_result.get("plan_a", [])}
+    fallbacks = {(f["class"], f["period"]): f for f in plan_result.get("plan_b", [])}
 
     # Group original timetable entries by teacher
     for p in original_timetable:
@@ -62,11 +63,11 @@ def generate_teacher_schedules(
         p_id = p.get("period")
         cls_id = p.get("class")
         time_slot = f"{p.get('start')}-{p.get('end')}"
-        duration = 40 # Standard period
+        duration = calculate_duration_minutes(p.get("start", ""), p.get("end", "")) or 40
 
         # Check if this period was affected
-        if p_id in fallbacks and fallbacks[p_id]["class"] == cls_id:
-            fb = fallbacks[p_id]
+        if (cls_id, p_id) in fallbacks:
+            fb = fallbacks[(cls_id, p_id)]
             teacher_schedules[t_code]["periods"].append({
                 "period": p_id,
                 "time": time_slot,
@@ -79,8 +80,8 @@ def generate_teacher_schedules(
             })
             teacher_schedules[t_code]["total_active_minutes"] += duration
 
-        elif p_id in swaps_from and swaps_from[p_id]["class"] == cls_id:
-            sw = swaps_from[p_id]
+        elif (cls_id, p_id) in swaps_from:
+            sw = swaps_from[(cls_id, p_id)]
             teacher_schedules[t_code]["periods"].append({
                 "period": sw.get("to_period"),
                 "original_period": p_id,
