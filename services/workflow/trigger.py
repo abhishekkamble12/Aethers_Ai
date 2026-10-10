@@ -35,8 +35,24 @@ def _sfn():
     return boto3.client("stepfunctions")
 
 
+def _table():
+    return boto3.resource("dynamodb").Table(os.environ["TABLE_NAME"])
+
+
+def resolve_stage(event: Dict[str, Any]) -> Dict[str, Any]:
+    """The declared GRAP stage comes from the tenant record (set by an admin / the seed), unless the caller passes one."""
+    if event.get("stage"):
+        return event
+    from services.admin.seed import declared_stage
+    tenant_id = event.get("tenant_id", "TENANT#demo")
+    stage = declared_stage(_table(), tenant_id)
+    if not stage:
+        raise ValueError(f"No declared stage on record for {tenant_id}; run scripts/seed_demo.py or pass 'stage'")
+    return {**event, "stage": stage}
+
+
 def trigger_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    run = parse_run_input(event or {})  # raises ValueError on bad input: the invocation fails visibly
+    run = parse_run_input(resolve_stage(event or {}))  # raises ValueError on bad input: the invocation fails visibly
     rerun_label = (event or {}).get("rerun_label", "")
     if rerun_label and not RERUN_LABEL_RE.match(str(rerun_label)):
         raise ValueError("rerun_label must match [a-z0-9]{1,12}")

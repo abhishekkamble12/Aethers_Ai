@@ -307,6 +307,20 @@ Rule for the whole plan: no infrastructure deploys after Sun 12:00 except a fix 
 
 ---
 
+### Demo readiness status (Sat Oct 10, 18:15 IST)
+
+> **One-command seed/reset: DONE (verified on AWS).**
+> - `python scripts/seed_demo.py` clears only the demo school (decisions, audit chain, tokens, receipts, forecast cache), records **Stage II → III (labelled REPLAY SCENARIO)** as audit row **#1**, prints `/health`, and prints the exact next trigger command with a fresh run label. Step Functions keeps execution names for 90 days, so a reset can't reuse one.
+> - On AWS it removed 38 + 8 + 1 items, seeded row #1, and the next run used **stage III from the tenant record**. The trigger and the schedule no longer hardcode the stage; an unseeded tenant fails visibly.
+> - **Re-run the seed right before each recording.**
+>
+> **`GET /health`: DONE (verified on AWS).** It reports table (ok, 76 ms), ruleset (version, sha256, 2 rules), declared stage with its source, forecast for tomorrow (**live**, Open-Meteo, cache hit), Bedrock (**not usable: "Operation not allowed"**, so notices use the static template), and audit head (seq, hash, chain valid).
+> - Status: `ok`, `degraded` (any labelled fallback, or not seeded), or `down` with HTTP 503 (table unreachable or chain broken). The Bedrock probe is cached for 10 minutes so health checks don't spend money. No secrets or internals in the output.
+> - Live it says **degraded**, and the *only* reason is Bedrock (Free plan).
+> - **Evidence:** `tests/test_seed_health.py` 13/13; full suite 166/166.
+>
+> **Still to do for demo readiness:** `scripts/demo.py` (the 3-step path) and the README section.
+
 ## 7. Likely judge questions about the backend
 
 **Q: On a Stage III day everything just goes indoors. Why not send one WhatsApp message to the PE teacher?**

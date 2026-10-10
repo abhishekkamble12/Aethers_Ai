@@ -143,6 +143,30 @@ Resources:
             Path: /verify/{id}
             Method: get
 
+  # 5c. Health: table, ruleset, declared stage, forecast freshness, Bedrock usability, audit head
+  HealthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services.health.handler.health_handler
+      Description: GET /health - what works right now (ok / degraded / down)
+      Environment:
+        Variables:
+          BEDROCK_MODEL_ID: amazon.nova-lite-v1:0
+      Policies:
+        - DynamoDBCrudPolicy:  # reads chain/META; writes the forecast cache
+            TableName: !Ref SaansTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.nova-lite-v1:0"
+      Events:
+        HealthApi:
+          Type: Api
+          Properties:
+            Path: /health
+            Method: get
+
   # 6. Bilingual Notification & WhatsApp Dispatch Function
   NotificationFunction:
     Type: AWS::Serverless::Function
@@ -228,6 +252,8 @@ Resources:
         Variables:
           STATE_MACHINE_ARN: !Ref SaansWorkflow
       Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref SaansTable
         - StepFunctionsExecutionPolicy:
             StateMachineName: !GetAtt SaansWorkflow.Name
         - Statement:
@@ -243,7 +269,7 @@ Resources:
             Name: SaansEveningWorkflowSchedule
             Description: Daily evening re-plan for the demo tenant
             Enabled: true
-            Input: '{"tenant_id": "TENANT#demo", "stage": "III"}'
+            Input: '{"tenant_id": "TENANT#demo"}'  # stage comes from the tenant record
 
 Outputs:
   StateMachineArn:
