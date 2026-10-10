@@ -60,6 +60,9 @@ Our own run proves the premise: at Stage III and IV the planner makes **0 swaps 
   4. Exit test: `sam build && sam deploy --guided` (region ap-south-1), then `curl -X POST $API/rehearse -d '{"stage":"III"}'` returns a plan.
 
 ### M2. Make the approval workflow real (≈4 h, owners A and D)
+> **M2a status: PARTIAL (code done and tested locally; not deployed).** Evidence: `python -m unittest tests.test_approval_flow` passes 19/19 against moto DynamoDB (single-use links, expiry, role from token not body, 409 when the window closed, 502 that keeps the link usable, no internals leaked). A local chain run (plan → RequestApproval → GET /decisions → POST /approve → replay gives 410) passes. `sam validate --lint` and `sam build` succeed; the template has 29 resources, including `AWS::StepFunctions::StateMachine`. Full suite 62/62. Moto caught a real bug before deploy: `consumed` is a DynamoDB reserved word. **Pending:** deploy and a real execution (needs the AWS profile).
+> **Also pulled forward from M7:** approver identity comes from the token, and there's no default action. **Removed:** the Telegram check that never ran behind API Gateway and the hardcoded chat-ID allowlist (X1 adds `/callbacks/telegram` properly). **Interim:** `AuditFunction` only logs (`persisted: false`) until M3.
+> **M2b (next):** normalise the approval result on the escalation path (`$.approval_result` is missing after a VP approval), separate the rejected and timed-out fail-safe events, and use the decision ID as the execution name.
 The state machine in `services/workflow/state_machine.json` is not deployed (there's no `AWS::Serverless::StateMachine` in the template) and would fail if it were.
 - **Add to `template.yaml`:**
   - `SaansWorkflow: Type: AWS::Serverless::StateMachine` with `DefinitionUri: ../services/workflow/state_machine.json`.

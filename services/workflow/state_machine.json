@@ -35,12 +35,12 @@
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
       "Parameters": {
-        "FunctionName": "${ApprovalFunctionArn}",
+        "FunctionName": "${RequestApprovalFunctionArn}",
         "Payload": {
           "taskToken.$": "$$.Task.Token",
           "tenant_id.$": "$.tenant_id",
           "decision_id.$": "$.planner_output.decision.decision_id",
-          "plan_summary.$": "$.planner_output.decision"
+          "escalation": false
         }
       },
       "ResultPath": "$.approval_result",
@@ -60,13 +60,12 @@
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
       "Parameters": {
-        "FunctionName": "${ApprovalFunctionArn}",
+        "FunctionName": "${RequestApprovalFunctionArn}",
         "Payload": {
           "taskToken.$": "$$.Task.Token",
           "tenant_id.$": "$.tenant_id",
-          "escalation": true,
           "decision_id.$": "$.planner_output.decision.decision_id",
-          "plan_summary.$": "$.planner_output.decision"
+          "escalation": true
         }
       },
       "ResultPath": "$.escalated_approval_result",

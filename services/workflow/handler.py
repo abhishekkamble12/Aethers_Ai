@@ -1,100 +1,75 @@
 """
-Approval Callback & Webhook Lambda Handler
-Handles:
-1. Webhook callbacks from Telegram bot (verifying secret token header & allowlisted chat ID)
-2. HTTP POST /approve/{shortId} from the Principal Brief interface
+POST /approve/{shortId}: the approver's answer to a paused Step Functions execution.
+
+Authority comes from the short ID itself: it was issued for one decision and one role
+(principal, or vice_principal after escalation), expires with the approval window, and is
+consumed atomically on first use. Anything in the request body that claims an identity is
+ignored. Body: {"action": "APPROVE_PLAN_A" | "APPROVE_PLAN_B" | "REJECT"}
 """
 
 import json
+import logging
 import os
+from datetime import datetime, timezone
+from typing import Any, Dict
+
 import boto3
-from typing import Dict, Any
+from botocore.exceptions import ClientError
 
-from services.workflow.workflow_manager import workflow_registry
+from services.common.http import ApiError, guarded, json_body, respond
+from services.workflow.decision_store import decision_key
+from services.workflow.token_store import consume_token, is_valid_short_id, release_token
 
-ALLOWLISTED_APPROVERS = {
-    "principal_delhi_demo": "Principal - DPS",
-    "vp_delhi_demo": "Vice Principal - DPS",
-    "chat_id_987654321": "Principal Telegram"
-}
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
-TELEGRAM_SECRET_HEADER = os.environ.get("TELEGRAM_SECRET_TOKEN", "")
+ACTIONS = ("APPROVE_PLAN_A", "APPROVE_PLAN_B", "REJECT")
+# Errors meaning the execution is no longer waiting on this token (timed out / escalated / finished).
+CLOSED_WINDOW_ERRORS = ("TaskTimedOut", "InvalidToken", "TaskDoesNotExist")
 
 
+def _table():
+    return boto3.resource("dynamodb").Table(os.environ["TABLE_NAME"])
+
+
+def _sfn():
+    return boto3.client("stepfunctions")
+
+
+@guarded
 def approval_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """
-    Handles approval requests via API Gateway or Telegram Webhook.
-    """
-    path_parameters = event.get("pathParameters") or {}
-    headers = event.get("headers") or {}
-    short_id = path_parameters.get("shortId")
+    short_id = (event.get("pathParameters") or {}).get("shortId")
+    if not is_valid_short_id(short_id):
+        raise ApiError(400, "invalid_short_id", "Approval link is malformed.")
 
-    # 1. Telegram Webhook Secret Check (if applicable)
-    telegram_token = headers.get("x-telegram-bot-api-secret-token") or headers.get("X-Telegram-Bot-Api-Secret-Token")
-    if "update_id" in event: # Telegram payload
-        expected_token = os.environ.get("TELEGRAM_SECRET_TOKEN", TELEGRAM_SECRET_HEADER)
-        if not expected_token or telegram_token != expected_token:
-            return {
-                "statusCode": 403,
-                "body": json.dumps({"error": "Unauthorized webhook token"})
-            }
+    action = json_body(event).get("action")
+    if action not in ACTIONS:
+        raise ApiError(400, "invalid_action", f"'action' must be one of {', '.join(ACTIONS)}.")
 
-    # 2. Parse Action and Approver
-    body_data = {}
-    if "body" in event and event["body"]:
-        try:
-            body_data = json.loads(event["body"])
-        except Exception:
-            body_data = {}
+    table = _table()
+    record = consume_token(table, short_id)
+    if record is None:
+        raise ApiError(410, "approval_link_invalid",
+                       "Approval link is unknown, already used, or expired.")
 
-    action = body_data.get("action", "APPROVE_PLAN_A")
-    approver_id = body_data.get("approver_id", "principal_delhi_demo")
+    decided_at = datetime.now(timezone.utc).isoformat()
+    result = {"action": action, "approver_role": record["role"], "decided_at": decided_at}
+    try:
+        _sfn().send_task_success(taskToken=record["task_token"], output=json.dumps(result))
+    except ClientError as e:
+        code = e.response["Error"]["Code"]
+        if code in CLOSED_WINDOW_ERRORS:
+            raise ApiError(409, "approval_window_closed",
+                           "This decision is no longer waiting for this approver (timed out or escalated).")
+        logger.error("send_task_success failed (%s) for decision=%s", code, record["decision_id"])
+        release_token(table, short_id)  # transient failure: keep the link usable
+        raise ApiError(502, "workflow_unavailable", "Workflow service unavailable. Please retry.")
 
-    # Verify allowlisted approver
-    if approver_id not in ALLOWLISTED_APPROVERS:
-        return {
-            "statusCode": 403,
-            "body": json.dumps({"error": f"Approver '{approver_id}' is not in authorized allowlist."})
-        }
-
-    # 3. Resolve Short ID to Step Functions Token
-    if short_id:
-        token_record = workflow_registry.consume_token(short_id)
-        if not token_record:
-            return {
-                "statusCode": 410,
-                "body": json.dumps({"error": "Approval token expired, invalid, or already consumed."})
-            }
-        
-        raw_task_token = token_record["task_token"]
-        
-        # If in AWS, resume Step Functions
-        if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") and raw_task_token != "MOCK_TOKEN":
-            try:
-                sfn = boto3.client("stepfunctions")
-                sfn.send_task_success(
-                    taskToken=raw_task_token,
-                    output=json.dumps({
-                        "action": action,
-                        "approver": approver_id,
-                        "timestamp": body_data.get("timestamp")
-                    })
-                )
-            except Exception as e:
-                return {
-                    "statusCode": 500,
-                    "body": json.dumps({"error": f"Failed to resume Step Functions: {str(e)}"})
-                }
-
-    return {
-        "statusCode": 200,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-        },
-        "body": json.dumps({
-            "status": "success",
-            "message": f"Action '{action}' recorded by {ALLOWLISTED_APPROVERS.get(approver_id)}.",
-            "action": action
-        })
-    }
+    table.update_item(
+        Key=decision_key(record["decision_id"]),
+        UpdateExpression="SET #s = :s, decided_by_role = :r, decided_at = :t REMOVE approval_pending",
+        ExpressionAttributeNames={"#s": "status"},
+        ExpressionAttributeValues={":s": action, ":r": record["role"], ":t": decided_at},
+    )
+    logger.info("Decision %s: %s by %s", record["decision_id"], action, record["role"])
+    return respond(200, {"status": "recorded", "decision_id": record["decision_id"], **result})

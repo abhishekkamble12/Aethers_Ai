@@ -28,31 +28,24 @@ class TestSecurityAndIsolation(unittest.TestCase):
         self.assertTrue(decision_key_a.startswith("TENANT#dps_rk_puram"))
         self.assertTrue(decision_key_b.startswith("TENANT#modern_school_barakhamba"))
 
-    def test_webhook_unauthorized_token_rejected(self):
-        """Telegram webhook rejects requests missing or with invalid secret token."""
-        event_with_bad_token = {
-            "update_id": 999123,
-            "headers": {
-                "x-telegram-bot-api-secret-token": "malicious_spoofed_token"
-            },
-            "body": json.dumps({"action": "APPROVE_PLAN_A"})
-        }
-        resp = approval_handler(event_with_bad_token, None)
-        self.assertEqual(resp["statusCode"], 403)
-        self.assertIn("Unauthorized webhook token", json.loads(resp["body"])["error"])
-
-    def test_webhook_unauthorized_approver_rejected(self):
-        """Webhook rejects approver not on strict allowlist."""
+    def test_identity_claim_in_body_grants_nothing(self):
+        """Claiming to be the principal without a valid approval link is rejected before any lookup.
+        (Authority comes only from the role-bound short ID; see tests/test_approval_flow.py.)"""
         event = {
-            "pathParameters": {"shortId": "tok123"},
-            "body": json.dumps({
-                "action": "APPROVE_PLAN_A",
-                "approver_id": "unauthorized_external_actor"
-            })
+            "httpMethod": "POST",
+            "pathParameters": {"shortId": "not/a/link"},
+            "body": json.dumps({"action": "APPROVE_PLAN_A", "approver_id": "principal_delhi_demo"})
         }
         resp = approval_handler(event, None)
-        self.assertEqual(resp["statusCode"], 403)
-        self.assertIn("not in authorized allowlist", json.loads(resp["body"])["error"])
+        self.assertEqual(resp["statusCode"], 400)
+        self.assertEqual(json.loads(resp["body"])["error"]["code"], "invalid_short_id")
+
+    def test_approval_requires_explicit_action(self):
+        """No default action: an empty body can never approve a plan."""
+        event = {"httpMethod": "POST", "pathParameters": {"shortId": "abcdefgh"}, "body": ""}
+        resp = approval_handler(event, None)
+        self.assertEqual(resp["statusCode"], 400)
+        self.assertEqual(json.loads(resp["body"])["error"]["code"], "invalid_action")
 
     def test_receipt_pii_data_minimization(self):
         """Public receipt endpoint contains only tamper-evident hashes, zero personal identifiable info."""

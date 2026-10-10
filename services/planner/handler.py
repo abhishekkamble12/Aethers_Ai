@@ -3,13 +3,27 @@ AWS Lambda Handlers for Ingest, Planner, and Stage Rehearsal
 """
 
 import json
+import logging
 import os
-import boto3
+import re
+from datetime import date, datetime, timedelta, timezone
 from typing import Dict, Any
+
+import boto3
 
 from services.planner.planner import plan_schedule
 from services.planner.csv_loader import load_timetable_csv
 from services.audit.hash_chain import GENESIS_HASH, create_audit_row
+from services.common.http import ApiError, guarded, is_http_event, json_body, respond
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+STAGES = ("I", "II", "III", "IV")
+STAGE_ALIASES = {"1": "I", "2": "II", "3": "III", "4": "IV"}
+SESSIONS = ("EVE", "MORN")
+TENANT_ID_RE = re.compile(r"^TENANT#[a-z0-9_-]{1,40}$")
+IST = timezone(timedelta(hours=5, minutes=30))
 
 TABLE_NAME = os.environ.get("TABLE_NAME", "SaansStateTable")
 
@@ -33,38 +47,57 @@ def _get_demo_fixtures():
     return timetable_records, forecast_data, ruleset_data
 
 
-def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """
-    Scheduled or on-demand execution handler:
-    1. Loads context (timetable, forecast, ruleset, declared stage)
-    2. Runs deterministic planner
-    3. Writes Decision and Audit row
-    """
-    tenant_id = event.get("tenant_id", "TENANT#demo")
-    declared_stage = event.get("stage", "III")
-    date_str = event.get("date", "2026-10-12")
-    decision_id = f"{tenant_id}#{date_str}#MORN"
+def normalise_stage(raw: Any) -> str:
+    """Accepts I-IV or 1-4; raises ValueError otherwise."""
+    stage = STAGE_ALIASES.get(str(raw).strip(), str(raw).strip().upper())
+    if stage not in STAGES:
+        raise ValueError(f"stage must be one of {', '.join(STAGES)} (or 1-4), got {raw!r}")
+    return stage
 
+
+def parse_run_input(event: Dict[str, Any]) -> Dict[str, str]:
+    """Validates a planner run request. The date defaults to tomorrow in IST: the evening run plans the next school day."""
+    tenant_id = event.get("tenant_id", "TENANT#demo")
+    if not isinstance(tenant_id, str) or not TENANT_ID_RE.match(tenant_id):
+        raise ValueError("tenant_id must look like TENANT#<id> with id matching [a-z0-9_-]{1,40}")
+    raw_date = event.get("date") or (datetime.now(IST).date() + timedelta(days=1)).isoformat()
+    try:
+        date_str = date.fromisoformat(str(raw_date)).isoformat()
+    except ValueError:
+        raise ValueError(f"date must be YYYY-MM-DD, got {raw_date!r}")
+    session = event.get("session", "MORN")
+    if session not in SESSIONS:
+        raise ValueError(f"session must be EVE or MORN, got {session!r}")
+    return {
+        "tenant_id": tenant_id,
+        "stage": normalise_stage(event.get("stage", "III")),
+        "date": date_str,
+        "session": session,
+        "decision_id": f"{tenant_id}#{date_str}#{session}",
+    }
+
+
+def run_planner(run: Dict[str, str]) -> Dict[str, Any]:
+    """Plans one decision, persists it when running in AWS, and returns {decision, audit_head}."""
     timetable_records, forecast_data, ruleset_data = _get_demo_fixtures()
 
-    # Run deterministic planner
     plan_result = plan_schedule(
         timetable=timetable_records,
         forecast=forecast_data,
         ruleset=ruleset_data,
-        declared_stage=declared_stage,
+        declared_stage=run["stage"],
         school_jurisdiction="Delhi",
-        decision_id=decision_id
+        decision_id=run["decision_id"]
     )
 
-    # Generate tamper-evident audit row
+    # NOTE: single genesis row until hack_win M3 replaces this with a persisted, conditional chain append.
     audit_row = create_audit_row(
         seq=1,
         prev_hash=GENESIS_HASH,
         actor_role="scheduler:planner",
         event="DECISION_PLAN_GENERATED",
         payload={
-            "decision_id": decision_id,
+            "decision_id": run["decision_id"],
             "swaps_count": len(plan_result["plan_a"]),
             "fallbacks_count": len(plan_result["plan_b"]),
             "exposure_before": plan_result["exposure_before"],
@@ -73,62 +106,65 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
     )
 
-    response_payload = {
-        "statusCode": 200,
-        "decision": plan_result,
-        "audit_head": audit_row
-    }
-
-    # If running inside AWS with DynamoDB available:
     if os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
-        try:
-            dynamodb = boto3.resource("dynamodb")
-            table = dynamodb.Table(TABLE_NAME)
-            
-            # Put Decision item
-            table.put_item(
-                Item={
-                    "PK": tenant_id,
-                    "SK": f"DEC#{date_str}#MORN",
-                    "GSI1PK": "STATUS#PENDING",
-                    "GSI1SK": date_str,
-                    "data": json.dumps(plan_result),
-                    "audit_head_hash": audit_row["hash"]
-                }
-            )
-            # Put Audit row
-            table.put_item(
-                Item={
-                    "PK": tenant_id,
-                    "SK": f"AUD#{audit_row['seq']:06d}",
-                    "data": json.dumps(audit_row)
-                }
-            )
-        except Exception as e:
-            response_payload["db_warning"] = str(e)
+        # Fail loudly: a workflow must never wait for approval of a decision that was not stored.
+        table = boto3.resource("dynamodb").Table(TABLE_NAME)
+        table.put_item(
+            Item={
+                "PK": run["tenant_id"],
+                "SK": f"DEC#{run['date']}#{run['session']}",
+                "GSI1PK": "STATUS#PENDING",
+                "GSI1SK": run["date"],
+                "status": "PLANNED",
+                "declared_stage": run["stage"],
+                "data": json.dumps(plan_result),
+                "audit_head_hash": audit_row["hash"]
+            }
+        )
+        table.put_item(
+            Item={
+                "PK": run["tenant_id"],
+                "SK": f"AUD#{audit_row['seq']:06d}",
+                "data": json.dumps(audit_row)
+            }
+        )
 
-    return {
-        "statusCode": 200,
-        "headers": { "Content-Type": "application/json" },
-        "body": json.dumps(response_payload)
-    }
+    return {"decision": plan_result, "audit_head": audit_row}
 
 
+def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """
+    Planner entry point.
+    - Step Functions (LoadContext) / EventBridge: returns the plain {decision, audit_head} dict
+      that the state machine's ResultSelector reads; invalid input raises, failing the execution visibly.
+    - API Gateway: same result wrapped in an HTTP response, with clean 400s.
+    """
+    if not is_http_event(event):
+        return run_planner(parse_run_input(event or {}))
+    return _planner_http(event, context)
+
+
+@guarded
+def _planner_http(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    try:
+        run = parse_run_input(json_body(event))
+    except ValueError as e:
+        raise ApiError(400, "invalid_input", str(e))
+    return respond(200, run_planner(run))
+
+
+@guarded
 def rehearse_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Stage Rehearsal API handler:
-    Runs instant what-if plan for requested stage (I, II, III, IV) with zero DB mutations.
+    Runs instant what-if plan for requested stage (I-IV or 1-4) with zero DB mutations.
     """
     params = event.get("queryStringParameters") or {}
-    stage = params.get("stage", "III")
-    
-    # Also support JSON body if called via POST body
-    if "body" in event and event["body"]:
-        try:
-            body_data = json.loads(event["body"])
-            stage = body_data.get("stage", stage)
-        except Exception:
-            pass
+    raw_stage = json_body(event).get("stage", params.get("stage", "III"))
+    try:
+        stage = normalise_stage(raw_stage)
+    except ValueError as e:
+        raise ApiError(400, "invalid_stage", str(e))
 
     timetable_records, forecast_data, ruleset_data = _get_demo_fixtures()
 
@@ -141,12 +177,4 @@ def rehearse_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         decision_id=f"REHEARSAL#STAGE_{stage}"
     )
     plan_result["declared_stage"] = stage
-
-    return {
-        "statusCode": 200,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-        },
-        "body": json.dumps(plan_result)
-    }
+    return respond(200, plan_result)

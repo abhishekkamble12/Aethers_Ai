@@ -64,3 +64,14 @@ def receipt_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "head_hash": DEMO_CHAIN[-1]["hash"] if DEMO_CHAIN else None
         })
     }
+
+
+def audit_event_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """
+    Step Functions audit states (AuditCloseNoChange / AuditCloseApproved / FailSafeNoBroadcast).
+    INTERIM (hack_win M2a): logs the workflow event only and reports persisted=False.
+    hack_win M3 replaces this with a conditional, hash-chained DynamoDB append.
+    """
+    import logging
+    logging.getLogger().info("Workflow audit event %s tenant=%s", event.get("event"), event.get("tenant_id"))
+    return {"event": event.get("event"), "tenant_id": event.get("tenant_id"), "persisted": False}

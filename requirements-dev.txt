@@ -1,0 +1,2 @@
+# Dev/test only (not shipped to Lambda)
+moto[dynamodb,stepfunctions]>=5.0

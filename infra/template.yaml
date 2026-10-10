@@ -2,6 +2,13 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: Saans - Air-Safety School Day Planner Infrastructure (Environmental Hacks 2026)
 
+Parameters:
+  AdminApiKey:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: Secret for the x-saans-admin-key header on GET /decisions (returns approval links). Pass at deploy time; never commit.
+
 Globals:
   Function:
     # One bundle for every function, built by scripts/build_lambda.py (services/ + data/).
@@ -14,10 +21,12 @@ Globals:
         TABLE_NAME: !Ref SaansTable
         APP_REGION: !Ref "AWS::Region"
         DELHI_STAGE_DEFAULT: "III"
+        # Must equal TimeoutSeconds of the approval states in services/workflow/state_machine.json
+        APPROVAL_TIMEOUT_SECONDS: "60"
   Api:
     Cors:
       AllowOrigin: "'*'"
-      AllowHeaders: "'Content-Type'"
+      AllowHeaders: "'Content-Type,x-saans-admin-key'"
       AllowMethods: "'GET,POST,OPTIONS'"
 
 Resources:
@@ -52,24 +61,19 @@ Resources:
             ProjectionType: ALL
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
 
   # 2. Ingest and Planner Lambda Function
   IngestPlannerFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: services.planner.handler.lambda_handler
-      Description: Scheduled or on-demand runner that classifies periods and generates Plan A/B
+      Description: LoadContext step - classifies periods and generates Plan A/B (invoked by SaansWorkflow)
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref SaansTable
-      Events:
-        ScheduledTrigger:
-          Type: Schedule
-          Properties:
-            Schedule: cron(0 14 * * ? *) # 19:30 IST evening run
-            Name: SaansEveningPlannerSchedule
-            Description: Daily evening tentative schedule re-plan trigger
-            Enabled: true
 
   # 3. Stage Rehearsal Lambda Function (Powers the interactive slider)
   RehearseFunction:
@@ -89,10 +93,15 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: services.workflow.handler.approval_handler
-      Description: Handles principal approval/rejection callbacks
+      Description: POST /approve/{shortId} - consumes a role-bound token and resumes the paused workflow
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref SaansTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - states:SendTaskSuccess
+              Resource: !Ref SaansWorkflow
       Events:
         ApproveApi:
           Type: Api
@@ -132,7 +141,79 @@ Resources:
             Path: /notifications/dispatch
             Method: post
 
+  # 7. Approval request step (waitForTaskToken target)
+  RequestApprovalFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services.workflow.request.request_approval_handler
+      Description: Stores the task token behind a short, role-bound, expiring approval ID
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SaansTable
+
+  # 8. Principal Brief (read-only, admin key)
+  DecisionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services.workflow.decisions.decisions_handler
+      Description: GET /decisions - plan, explanations and the pending approval link
+      Environment:
+        Variables:
+          ADMIN_API_KEY: !Ref AdminApiKey
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref SaansTable
+      Events:
+        DecisionsApi:
+          Type: Api
+          Properties:
+            Path: /decisions
+            Method: get
+
+  # 9. Workflow audit steps (interim until hack_win M3: logs only)
+  AuditFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services.audit.handler.audit_event_handler
+      Description: Audit close / fail-safe steps of SaansWorkflow
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SaansTable
+
+  # 10. Decision workflow: plan -> wait for principal -> escalate -> notify / fail safe
+  SaansWorkflow:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Type: STANDARD  # waitForTaskToken requires Standard workflows
+      DefinitionUri: ../services/workflow/state_machine.json
+      DefinitionSubstitutions:
+        IngestPlannerFunctionArn: !GetAtt IngestPlannerFunction.Arn
+        RequestApprovalFunctionArn: !GetAtt RequestApprovalFunction.Arn
+        NotificationFunctionArn: !GetAtt NotificationFunction.Arn
+        AuditFunctionArn: !GetAtt AuditFunction.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref IngestPlannerFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref RequestApprovalFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref NotificationFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref AuditFunction
+      Events:
+        EveningRun:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 14 * * ? *) # 19:30 IST: plan tomorrow (date defaults to tomorrow, IST)
+            Name: SaansEveningWorkflowSchedule
+            Description: Daily evening re-plan for the demo tenant
+            Enabled: true
+            Input: '{"tenant_id": "TENANT#demo", "stage": "III"}'
+
 Outputs:
+  StateMachineArn:
+    Description: SaansWorkflow ARN (start a run with aws stepfunctions start-execution)
+    Value: !Ref SaansWorkflow
   SaansTableArn:
     Description: DynamoDB Single Table ARN
     Value: !GetAtt SaansTable.Arn
