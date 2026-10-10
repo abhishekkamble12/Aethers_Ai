@@ -75,13 +75,16 @@ class TestDay3DrillsAndProof(unittest.TestCase):
 
     # 4. AI Evaluation Run
     def test_ai_gold_evaluation_metrics(self):
-        """Runs evaluation over gold set and hostile cases to verify 100% precision, quote validity, and refusal."""
+        """Validator evaluation: quotes verified, hostile inputs refused, and known gaps reported, not hidden."""
         summary = run_gold_evaluation()
         metrics = summary["metrics"]
-        self.assertEqual(metrics["rule_precision_pct"], 100.0)
+        self.assertIn("validator only", summary["what_this_measures"])
+        self.assertEqual(summary["dataset_size"]["real_circulars"], 1)
         self.assertEqual(metrics["verbatim_quote_validity_pct"], 100.0)
-        self.assertEqual(metrics["prompt_injection_refusal_rate_pct"], 100.0)
-        self.assertEqual(metrics["hallucinated_quote_refusal_rate_pct"], 100.0)
+        self.assertTrue(metrics["prompt_injection_refused"])
+        self.assertTrue(metrics["invented_quote_refused"])
+        # r-018 (hybrid-mode quote) and r-019 (assembly quote) do not justify an outdoor-sports ban.
+        self.assertEqual(sorted(g["rule_id"] for g in summary["known_gaps"]), ["r-018", "r-019"])
 
     # 5. Stage Rehearsal Handler
     def test_stage_rehearsal_handler_zero_side_effects(self):

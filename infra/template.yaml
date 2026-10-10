@@ -101,7 +101,9 @@ Resources:
             - Effect: Allow
               Action:
                 - states:SendTaskSuccess
-              Resource: !Ref SaansWorkflow
+              # By name, not !Ref: referencing the resource creates a cycle (API -> approval role ->
+              # workflow -> notify -> API, because notify links to the API's receipt page).
+              Resource: !Sub "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:SaansWorkflow-${AWS::StackName}"
       Events:
         ApproveApi:
           Type: Api
@@ -144,16 +146,14 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: services.notify.handler.notify_handler
-      Description: Drafts bilingual safety notices with Bedrock/template fallback and WhatsApp link builder
+      Description: DraftAndDispatchNotices step - bilingual notices (Bedrock or static template) with receipt link
+      Environment:
+        Variables:
+          # Notices link to this API's public receipt page: {PUBLIC_BASE_URL}/verify/{receipt_id}
+          PUBLIC_BASE_URL: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref SaansTable
-      Events:
-        NotifyApi:
-          Type: Api
-          Properties:
-            Path: /notifications/dispatch
-            Method: post
 
   # 7. Approval request step (waitForTaskToken target)
   RequestApprovalFunction:
@@ -198,6 +198,7 @@ Resources:
   SaansWorkflow:
     Type: AWS::Serverless::StateMachine
     Properties:
+      Name: !Sub "SaansWorkflow-${AWS::StackName}"
       Type: STANDARD  # waitForTaskToken requires Standard workflows
       DefinitionUri: ../services/workflow/state_machine.json
       DefinitionSubstitutions:

@@ -8,32 +8,41 @@ import copy
 from typing import List, Dict, Any, Optional, Tuple
 from services.rules.rules_engine import classify_period, get_class_band
 
+# Plan B indoor sessions. Only sessions with real physical movement count as "kept active";
+# a custom bank may add seated items with physical=False and they are reported as lost PE minutes.
 DEFAULT_INDOOR_ACTIVITIES = {
     "primary": [
-        "Indoor Yoga & Fun Posture Stories",
-        "Rhythmic Aerobics & Coordination Drills",
-        "Interactive Health & Wellness Workshop"
+        {"name": "Indoor Yoga & Fun Posture Stories", "physical": True},
+        {"name": "Rhythmic Aerobics & Coordination Drills", "physical": True},
+        {"name": "Indoor Movement Games (Relay, Balance, Hopscotch)", "physical": True}
     ],
     "middle": [
-        "Chess & Strategic Board Games Challenge",
-        "Table Tennis / Carrom Inter-House League",
-        "Indoor Calisthenics & Core Conditioning"
+        {"name": "Table Tennis Inter-House League", "physical": True},
+        {"name": "Indoor Calisthenics & Core Conditioning", "physical": True},
+        {"name": "Skipping & Agility Ladder Circuit", "physical": True}
     ],
     "secondary": [
-        "Chess Tournament & Tactical Analysis",
-        "Indoor Fitness Circuit & Flexibility Training",
-        "Sports Psychology & Strategy Audio-Visual Session"
+        {"name": "Indoor Fitness Circuit & Flexibility Training", "physical": True},
+        {"name": "Table Tennis & Badminton Footwork Drills", "physical": True},
+        {"name": "Yoga & Mobility Session", "physical": True}
     ],
     "senior_secondary": [
-        "Cardio-Fitness & Aerobic Stretches",
-        "Table Tennis & Reflex Training",
-        "Sports Nutrition & Recovery Lecture"
+        {"name": "Cardio-Fitness & Aerobic Stretches", "physical": True},
+        {"name": "Table Tennis & Reflex Training", "physical": True},
+        {"name": "Bodyweight Strength Circuit", "physical": True}
     ],
     "all": [
-        "Structured Indoor Physical Wellness Session",
-        "Mindfulness & Low-Respiration Conditioning"
+        {"name": "Structured Indoor Physical Wellness Session", "physical": True}
     ]
 }
+
+PE_SUBJECTS = {"physical education", "pe", "pt", "physical training", "games", "sports"}
+
+
+def is_pe_period(p: Dict[str, Any]) -> bool:
+    """A PE/sports period: an outdoor period, or a subject that is exactly a PE name (no substring guessing)."""
+    return bool(p.get("outdoor")) or p.get("subject", "").strip().lower() in PE_SUBJECTS
+
 
 def calculate_duration_minutes(start_str: str, end_str: str) -> int:
     """Calculates minutes between HH:MM and HH:MM."""
@@ -99,16 +108,51 @@ def describe_conflict(key, classes) -> str:
 def _plan_b(orig_row: Dict[str, Any], bad_period: Dict[str, Any], index: int) -> Dict[str, Any]:
     band = get_class_band(orig_row["class"])
     activities = DEFAULT_INDOOR_ACTIVITIES.get(band, DEFAULT_INDOOR_ACTIVITIES["all"])
+    activity = activities[index % len(activities)]
     return {
         "class": orig_row["class"],
         "period": orig_row["period"],
         "subject": orig_row["subject"],
         "venue": orig_row.get("venue", "Ground"),
         "fallback_venue": "Indoor Hall / Classroom",
-        "assigned_activity": activities[index % len(activities)],
+        "assigned_activity": activity["name"],
+        "activity_is_physical": activity["physical"],
         "duration_minutes": calculate_duration_minutes(orig_row.get("start", ""), orig_row.get("end", "")),
         "reason": bad_period.get("reason", "Outdoor sports prohibited; replaced with indoor session to preserve activity minutes."),
         "rule_id": bad_period.get("rule_ids", ["r-017"])[0] if bad_period.get("rule_ids") else "r-017"
+    }
+
+
+def pe_minutes_report(timetable, problematic_periods, plan_a_swaps, plan_b_fallbacks) -> Dict[str, Any]:
+    """
+    Measured from the timetable: where every scheduled PE minute ended up.
+    kept_active = unchanged + moved to a cleaner outdoor slot + replaced by a physical indoor session.
+    """
+    moved = {(s["class"], s["from_period"]) for s in plan_a_swaps}
+    replaced = {(b["class"], b["period"]): b for b in plan_b_fallbacks}
+    flagged = {(b["class"], b["period"]) for b in problematic_periods}
+    m = {"scheduled": 0, "unchanged": 0, "moved_to_cleaner_slot": 0, "replaced_indoor_active": 0, "lost": 0}
+    for p in timetable:
+        if not is_pe_period(p):
+            continue
+        mins = calculate_duration_minutes(p.get("start", ""), p.get("end", ""))
+        key = (p["class"], p["period"])
+        m["scheduled"] += mins
+        if key in moved:
+            m["moved_to_cleaner_slot"] += mins
+        elif key in replaced:
+            m["replaced_indoor_active" if replaced[key].get("activity_is_physical") else "lost"] += mins
+        elif key in flagged:
+            m["lost"] += mins  # flagged but neither moved nor replaced
+        else:
+            m["unchanged"] += mins
+    kept = m["unchanged"] + m["moved_to_cleaner_slot"] + m["replaced_indoor_active"]
+    pct = round(kept / m["scheduled"] * 100.0, 1) if m["scheduled"] else 0.0
+    return {
+        "pe_minutes": {**m, "kept_active": kept, "basis": "measured from the timetable"},
+        # Share of scheduled PE minutes that stayed physically active (outdoors in a permitted slot or a
+        # physical indoor session). Exposure numbers next to it are modelled, not measured.
+        "pe_minutes_preserved": pct,
     }
 
 
@@ -138,7 +182,7 @@ def plan_schedule(
                 "decision_id": decision_id, "declared_stage": declared_stage, "day": day,
                 "status": "confirmed_no_change", "message": f"No classes scheduled on {day}.",
                 "plan_a": [], "plan_b": [], "exposure_before": 0.0, "exposure_after": 0.0,
-                "exposure_reduction_pct": 0.0, "pe_minutes_preserved": 0.0,
+                "exposure_reduction_pct": 0.0, **pe_minutes_report([], [], [], []),
                 "ruleset_version": ruleset.get("ruleset_version", "unknown"),
                 "classified_periods": [], "decision_trace": [],
                 "revalidation": {"new_conflicts_found": 0, "swaps_reverted": []}
@@ -171,15 +215,6 @@ def plan_schedule(
     # Calculate initial baseline exposure
     exp_before_nom, exp_before_pess = evaluate_exposure(timetable, forecast_map, delta)
 
-    # Count scheduled PE minutes
-    original_pe_minutes = sum(
-        calculate_duration_minutes(p.get("start", ""), p.get("end", ""))
-        for p in timetable
-        if "pe" in p.get("subject", "").lower()
-        or "physical education" in p.get("subject", "").lower()
-        or "pt" in p.get("subject", "").lower()
-        or bool(p.get("outdoor"))
-    )
 
     # 3. Check for need to move
     # An outdoor period needs intervention if its label is 'banned' or 'restricted'
@@ -200,7 +235,7 @@ def plan_schedule(
             "exposure_before": exp_before_nom,
             "exposure_after": exp_before_nom,
             "exposure_reduction_pct": 0.0,
-            "pe_minutes_preserved": 100.0 if original_pe_minutes > 0 else 0.0,
+            **pe_minutes_report(timetable, [], [], []),
             "ruleset_version": ruleset.get("ruleset_version", "unknown"),
             "classified_periods": classified_periods,
             "input_conflicts": input_conflicts,
@@ -331,30 +366,6 @@ def plan_schedule(
     if exp_before_nom > 0:
         red_pct = round(((exp_before_nom - exp_after_nom) / exp_before_nom) * 100.0, 1)
 
-    # Calculate preserved PE minutes:
-    # All PE periods either successfully swapped into safe outdoor slots, converted to indoor sessions, or already compliant
-    swapped_minutes = sum(
-        calculate_duration_minutes(
-            next((p["start"] for p in timetable if p["class"] == s["class"] and p["period"] == s["from_period"]), ""),
-            next((p["end"] for p in timetable if p["class"] == s["class"] and p["period"] == s["from_period"]), "")
-        )
-        for s in plan_a_swaps
-    )
-    fallback_minutes = sum(
-        fb.get("duration_minutes", 0) for fb in plan_b_fallbacks
-    )
-    unaffected_pe_minutes = sum(
-        calculate_duration_minutes(p.get("start", ""), p.get("end", ""))
-        for p in timetable
-        if ("pe" in p.get("subject", "").lower()
-            or "physical education" in p.get("subject", "").lower()
-            or "pt" in p.get("subject", "").lower()
-            or bool(p.get("outdoor")))
-        and not any(bad["class"] == p["class"] and bad["period"] == p["period"] for bad in problematic_periods)
-    )
-    total_preserved_minutes = unaffected_pe_minutes + swapped_minutes + fallback_minutes
-    pe_preserved_pct = round((total_preserved_minutes / original_pe_minutes) * 100.0, 1) if original_pe_minutes > 0 else 100.0
-
     return {
         "decision_id": decision_id,
         "declared_stage": declared_stage,
@@ -364,7 +375,7 @@ def plan_schedule(
         "exposure_before": exp_before_nom,
         "exposure_after": exp_after_nom,
         "exposure_reduction_pct": red_pct,
-        "pe_minutes_preserved": pe_preserved_pct,
+        **pe_minutes_report(timetable, problematic_periods, plan_a_swaps, plan_b_fallbacks),
         "ruleset_version": ruleset.get("ruleset_version", "unknown"),
         "classified_periods": classified_periods,
         "input_conflicts": input_conflicts,

@@ -8,7 +8,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/AWS-Serverless-orange?logo=amazon-aws&style=flat-square" alt="AWS Serverless">
   <img src="https://img.shields.io/badge/Python-3.11-blue?logo=python&style=flat-square" alt="Python 3.11">
-  <img src="https://img.shields.io/badge/Automated_Tests-40_Passing-brightgreen?style=flat-square" alt="Tests 40 Passing">
+  <img src="https://img.shields.io/badge/Automated_Tests-passing-brightgreen?style=flat-square" alt="Automated tests passing">
   <img src="https://img.shields.io/badge/Regulatory_Scope-Delhi--NCR_GRAP_I--IV-purple?style=flat-square" alt="GRAP Stages I-IV">
   <img src="https://img.shields.io/badge/Integrity-SHA--256_Hash_Chain-cyan?style=flat-square" alt="Cryptographic Hash Chain">
   <img src="https://img.shields.io/badge/License-MIT-lightgrey?style=flat-square" alt="License MIT">
@@ -18,7 +18,7 @@
 
 ## ⚡ Quick Pitch (2 Minutes)
 
-**The Problem:** Every winter, Delhi-NCR hits AQI 400+. Regulatory bodies issue emergency orders banning outdoor sports. Schools cancel PE classes, leaving 400,000+ children sedentary. Administrators lack time to re-plan schedules or prove compliance.
+**The Problem:** Every winter, Delhi-NCR hits AQI 400+. Regulatory bodies issue emergency orders banning outdoor sports. Schools cancel PE periods, so children lose their physical activity for the day. Administrators lack time to re-plan schedules or prove compliance.
 
 **Our Solution:** Saans automates the entire lifecycle:
 1. **Deterministic Re-Planning** — Preserves 100% of PE minutes by swapping to clean-air time slots or converting to indoor wellness sessions (chess, yoga, table tennis)
@@ -27,12 +27,12 @@
 4. **Cryptographic Audit Trail** — SHA-256 hash chain verifiable in-browser; public receipts for compliance inquiries
 
 **Technical Highlights:**
-- **40/40 Automated Tests Passing** — Edge cases: teacher collisions, venue double-booking, locked periods, pessimistic PM2.5 checks
-- **Mathematically Proven Correctness** — Greedy swap algorithm with hard constraints validated through unit tests
+- **Automated tests (`python run_all_tests.py`)** — Edge cases: teacher collisions, venue double-booking, locked periods, pessimistic PM2.5 checks
+- **Deterministic, tested planner** — Greedy swap search with hard constraints (teacher/venue clashes, locked periods, pessimistic forecast), each decision explained in `decision_trace`
 - **Regulatory Depth** — Verbatim quote validation against official DoE circulars (rejects hallucinations & prompt injections)
 - **AWS-Native Architecture** — EventBridge → Step Functions → Lambda → DynamoDB single-table design
 
-**Impact:** 1,000 schools × 400 students = 400,000 children protected. Zero manual re-planning overhead. Public accountability via cryptographic receipts.
+**Impact:** For each school on a bad-air day: every outdoor PE period is either moved to a permitted, cleaner slot or replaced by an indoor physical session, measured per decision (`pe_minutes`). Not yet piloted; no school count is claimed. Public accountability via cryptographic receipts.
 
 **Demo:** Live terminal execution + in-browser hash verification + Stage Rehearsal "what-if" simulator.
 
@@ -216,7 +216,7 @@ Allows school principals to pre-configure automated policies:
 ### 2. Multi-Tenant Scalability (1,000 Synthetic Schools)
 - Tested via [`services/drills/tenant_scale_sim.py`](file:///d:/Aethers_Ai/services/drills/tenant_scale_sim.py).
 - Generates partition keys and hashes for **1,000 concurrent Delhi-NCR schools in 0.04 seconds** using DynamoDB single-table partitioning with **zero partition key collisions**.
-- Shields over 400,000 students from peak pollution exposure across the capital region.
+- Moves outdoor activity out of the most polluted periods for every class in a participating school (modelled exposure, labelled as such).
 - **Note:** This benchmark measures partition-key generation throughput, not full planning execution.
 
 ### 3. Secondary Profile: Outdoor Ground Crew (`data/demo/profile_outdoor_crew.json`)

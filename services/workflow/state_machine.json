@@ -155,7 +155,8 @@
           "approval.$": "$.final_approval",
           "stage.$": "$.planner_output.decision.declared_stage",
           "plan.$": "$.planner_output.decision",
-          "execution.$": "$$.Execution.Name"
+          "execution.$": "$$.Execution.Name",
+          "receipt_id.$": "$.planner_output.receipt_id"
         }
       },
       "ResultSelector": {

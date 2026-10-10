@@ -4,7 +4,7 @@ Lambda handler for Bilingual Notification Drafting and WhatsApp Dispatch
 - Step Functions (DraftAndDispatchNotices): drafts the approved plan's notices and appends a
   NOTICES_DRAFTED audit row recording, per notice, whether Bedrock or the static template wrote
   it and a digest of the exact text, so a fallback is always visible in the chain.
-- API Gateway (POST /notifications/dispatch): drafts only, no audit (not tied to a decision).
+- Direct HTTP invocation: drafts only, no audit. (No public API route: only the workflow drafts notices.)
 Notices are drafted and returned as WhatsApp click-to-share links; nothing is pushed to phones.
 """
 
@@ -39,7 +39,8 @@ def notify_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     if not tenant_id or not decision_id:
         raise ValueError("tenant_id and decision_id are required")
     stage = normalise_stage(event.get("stage", "III"))
-    package = generate_parent_broadcast_package(event.get("plan") or {}, stage=stage)
+    package = generate_parent_broadcast_package(event.get("plan") or {}, stage=stage,
+                                                receipt_id=event.get("receipt_id"))
     notices = _summary(package)
 
     table = boto3.resource("dynamodb").Table(os.environ["TABLE_NAME"])

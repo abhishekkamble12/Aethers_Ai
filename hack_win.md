@@ -130,6 +130,14 @@ The state machine in `services/workflow/state_machine.json` is not deployed (the
   6. **If the extractor isn't working by Sunday 09:00:** cut "reads the order" to "validates a ruleset": show the validator rejecting the two hostile fixtures, and change the narration to "rules are hand-entered from the circular and validated by code; model extraction is next".
 
 ### M5. Make every number honest (≈1.5 h, owner B)
+> **Status: DONE locally (tested; deploys with the rest).**
+> - **PE minutes:** `pe_minutes` is measured per decision (scheduled / unchanged / moved_to_cleaner_slot / replaced_indoor_active / lost). `pe_minutes_preserved` is now the share kept *physically active*. The indoor bank holds only physical sessions (chess, carrom and lectures removed); a seated item counts as lost. PE detection uses exact subject names ("Speech", "Optics" no longer count).
+> - **Notices:** they state only plan facts (`facts`). The Bedrock prompt no longer asserts "100% preserved". The fake `saans.delhi.gov.in` ack and roster links are replaced by our own `{PUBLIC_BASE_URL}/verify/{receipt_id}`, with no link if either is missing. The date comes from the decision instead of a hardcoded default.
+> - **Removed:** `tenant_scale_sim.py` and the "400,000 children" / "Mathematically proven" README claims.
+> - **Eval** now says it measures the validator only (n=1 circular, 3 hand-entered rules) and reports the gap it finds: 2/3 accepted rules have a quote that doesn't support the action.
+> - **Also done (from M7):** the public `/notifications/dispatch` route is removed. That also broke a CloudFormation dependency cycle; the approval role now references the state machine by its fixed name.
+> - **Evidence:** `test_honest_numbers` 11/11; full suite 121/121; `sam validate --lint` and `sam build` OK.
+> - **Frontend still contains `saans.delhi.gov.in`** in `app/privacy/page.tsx`, `components/real-time/NotificationCenter.tsx`, `components/verification/ReceiptDisplay.tsx`, `web/index.html` and `web/verify.html`. That's for the frontend owner to remove before recording.
 - **`planner.py:326-348`, `pe_minutes_preserved`:** unaffected + swapped + fallback always equals the original, so it is 100% by construction at every stage. It also counts "Sports Nutrition & Recovery Lecture" and "Sports Psychology Audio-Visual Session" (`DEFAULT_INDOOR_ACTIVITIES`) as preserved activity.
   - Replace it with three measured fields: `pe_minutes_outdoor_retained` (swapped into a safe slot), `pe_minutes_active_indoor` (Plan B activities tagged `active: true`) and `pe_minutes_lost`.
   - Remove the lecture items from the bank, or tag them `active: false`.

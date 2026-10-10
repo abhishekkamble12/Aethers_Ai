@@ -4,12 +4,16 @@ Supports:
 1. Hindi and English notice generation for Parents and Teachers
 2. WhatsApp click-to-share link builder for class teachers
 3. Bedrock LLM generation with automatic static template fallback (circuit breaker)
-4. Parent acknowledgement link builder
+4. Link to the public receipt page (PUBLIC_BASE_URL/verify/{receipt_id}) so anyone can check the decision
+
+Every fact in a notice comes from the approved plan. The only link is our own receipt page; when
+PUBLIC_BASE_URL or the receipt ID is missing, the notice simply has no link.
 """
 
 import json
 import os
 import logging
+import re
 import urllib.parse
 from typing import Dict, Any, Optional
 
@@ -21,35 +25,54 @@ BEDROCK_REGION = os.environ.get("APP_REGION", "ap-south-1")
 STATIC_NOTICES = {
     "english": {
         "parents_plan_b": (
-            "Dear Parents, In compliance with GRAP Stage {stage} directives from the Directorate of Education, "
-            "outdoor sports and physical education have been moved to indoor wellness sessions (chess, table tennis, yoga) "
-            "to keep children safe and active. Please acknowledge receipt: {ack_link}"
+            "Dear Parents, In compliance with GRAP Stage {stage} directives, outdoor sports and physical education "
+            "today are replaced by indoor physical sessions (yoga, table tennis, fitness circuits) so children stay "
+            "active away from polluted air.{verify_line}"
         ),
         "parents_plan_a": (
-            "Dear Parents, Due to elevated morning air pollution under Stage {stage}, scheduled physical activities have been "
-            "rescheduled to lower-exposure afternoon slots. No classes are cancelled. Please acknowledge: {ack_link}"
+            "Dear Parents, Because of high air pollution under GRAP Stage {stage}, some outdoor physical activity "
+            "periods today have been moved to times with lower forecast pollution. No classes are cancelled.{verify_line}"
         ),
         "teachers": (
-            "Notice to Teachers: Timetable for {date} has been updated under Stage {stage} directives. "
-            "PE staff: Please report to designated indoor halls. View your personalized roster: {roster_link}"
-        )
+            "Notice to Teachers: Today's timetable ({date}) has been updated under GRAP Stage {stage}. "
+            "PE staff: please run the assigned indoor physical sessions in the indoor venues listed in today's plan.{verify_line}"
+        ),
+        "verify_line": " Verify this decision: {url}",
     },
     "hindi": {
         "parents_plan_b": (
-            "आदरणीय अभिभावक, शिक्षा निदेशालय के ग्रैप स्टेज {stage} के निर्देशों के अनुसार, "
-            "बच्चों के स्वास्थ्य की सुरक्षा के लिए खेल कूद की गतिविधियों को सुरक्षित इनडोर सत्रों (शतरंज, टेबल टेनिस, योग) में स्थानांतरित किया गया है। "
-            "कृपया प्राप्ति की पुष्टि करें: {ack_link}"
+            "आदरणीय अभिभावक, ग्रैप स्टेज {stage} के निर्देशों के अनुसार, "
+            "आज खेल-कूद की बाहरी गतिविधियों की जगह इनडोर शारीरिक सत्र (योग, टेबल टेनिस, व्यायाम) होंगे, "
+            "ताकि बच्चे प्रदूषित हवा से दूर सक्रिय रहें।{verify_line}"
         ),
         "parents_plan_a": (
-            "आदरणीय अभिभावक, स्टेज {stage} के तहत वायु गुणवत्ता को ध्यान में रखते हुए, शारीरिक गतिविधियों का समय बदल दिया गया है ताकि बच्चे सुरक्षित रहें। "
-            "कोई भी क्लास रद्द नहीं की गई है। पुष्टि करें: {ack_link}"
+            "आदरणीय अभिभावक, ग्रैप स्टेज {stage} के तहत वायु प्रदूषण अधिक होने के कारण आज कुछ शारीरिक गतिविधि के पीरियड "
+            "कम प्रदूषण वाले समय पर किए गए हैं। कोई कक्षा रद्द नहीं की गई है।{verify_line}"
         ),
         "teachers": (
-            "शिक्षकों के लिए सूचना: स्टेज {stage} निर्देशों के अनुसार {date} की समय सारिणी अपडेट कर दी गई है। "
-            "पीई शिक्षक कृपया निर्धारित इनडोर हॉल में उपस्थित रहें।"
-        )
+            "शिक्षकों के लिए सूचना: ग्रैप स्टेज {stage} के अनुसार आज ({date}) की समय सारिणी अपडेट की गई है। "
+            "पीई शिक्षक आज की योजना में दिए गए इनडोर सत्र लें।{verify_line}"
+        ),
+        "verify_line": " इस निर्णय की जाँच करें: {url}",
     }
 }
+
+
+def verify_url(receipt_id: Optional[str], public_base_url: Optional[str] = None) -> Optional[str]:
+    base = (public_base_url if public_base_url is not None else os.environ.get("PUBLIC_BASE_URL", "")).rstrip("/")
+    return f"{base}/verify/{receipt_id}" if base and receipt_id else None
+
+
+def plan_facts(plan: Dict[str, Any]) -> Dict[str, Any]:
+    """The only facts a notice may state, all read from the approved plan."""
+    pe = plan.get("pe_minutes") or {}
+    return {
+        "periods_moved": len(plan.get("plan_a", [])),
+        "periods_replaced_indoor": len(plan.get("plan_b", [])),
+        "pe_minutes_scheduled": pe.get("scheduled"),
+        "pe_minutes_kept_active": pe.get("kept_active"),
+        "modelled_exposure_reduction_pct": plan.get("exposure_reduction_pct"),
+    }
 
 
 def _invoke_bedrock_nova(
@@ -57,7 +80,7 @@ def _invoke_bedrock_nova(
     language: str,
     stage: str,
     plan_summary: Dict[str, Any],
-    ack_link: str
+    link: Optional[str]
 ) -> Optional[str]:
     """
     Attempts to invoke Amazon Bedrock (Nova Lite) to generate a context-aware safety notice.
@@ -68,24 +91,20 @@ def _invoke_bedrock_nova(
 
         client = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
 
-        swaps_count = len(plan_summary.get("plan_a", []))
-        fallbacks_count = len(plan_summary.get("plan_b", []))
-        exposure_reduction = plan_summary.get("exposure_reduction_pct", 0)
-
+        facts = plan_facts(plan_summary)
         lang_instruction = "in Hindi (Devanagari script)" if language == "hindi" else "in English"
         audience_instruction = "parents of school children" if audience == "parents" else "PE and subject teachers"
 
         prompt = (
             f"You are drafting an official school safety notice {lang_instruction} for {audience_instruction}.\n\n"
-            f"Context:\n"
-            f"- GRAP Stage {stage} has been declared by the Commission for Air Quality Management (CAQM) in Delhi-NCR.\n"
-            f"- {swaps_count} outdoor periods were rescheduled to lower-pollution time slots (Plan A swaps).\n"
-            f"- {fallbacks_count} outdoor periods were converted to indoor wellness sessions (Plan B indoor bank).\n"
-            f"- Modelled outdoor exposure was reduced by {exposure_reduction}%.\n"
-            f"- 100% of physical education minutes have been preserved through rescheduling.\n"
-            f"- Parents should acknowledge receipt at: {ack_link}\n\n"
-            f"Write a concise, empathetic, and factual safety notice (max 3 sentences). "
-            f"Do NOT include any information not provided above. Do NOT invent regulations."
+            f"Facts (use only these):\n"
+            f"- GRAP Stage {stage} is in force in Delhi-NCR.\n"
+            f"- {facts['periods_moved']} outdoor activity periods were moved to times with lower forecast pollution.\n"
+            f"- {facts['periods_replaced_indoor']} outdoor activity periods were replaced by indoor physical sessions.\n"
+            f"- {facts['pe_minutes_kept_active']} of {facts['pe_minutes_scheduled']} scheduled PE minutes stay physically active.\n"
+            + (f"- Anyone can verify this decision at: {link}\n" if link else "")
+            + "\nWrite a concise, factual notice (max 3 sentences). Do not add any other numbers, regulations, "
+            "health claims or links."
         )
 
         # Nova Lite uses Converse API format
@@ -141,8 +160,9 @@ def draft_notice(
     audience: str = "parents", # "parents" or "teachers"
     language: str = "english", # "english" or "hindi"
     stage: str = "III",
-    date_str: str = "2026-10-12",
-    ack_base_url: str = "https://saans.delhi.gov.in/ack",
+    date_str: Optional[str] = None,
+    receipt_id: Optional[str] = None,
+    public_base_url: Optional[str] = None,
     force_fallback: bool = False
 ) -> Dict[str, Any]:
     """
@@ -151,9 +171,10 @@ def draft_notice(
     missing credentials, throttle, network error — immediately falls back to pre-validated
     static bilingual templates with zero downtime (circuit breaker pattern).
     """
-    decision_id = plan.get("decision_id", "demo")
-    short_ack_id = decision_id.split("#")[-1] if "#" in decision_id else "ack101"
-    ack_link = f"{ack_base_url}/{short_ack_id}"
+    link = verify_url(receipt_id, public_base_url)
+    if date_str is None:  # the decision's own date, e.g. TENANT#demo#2026-10-12#MORN
+        m = re.search(r"#(\d{4}-\d{2}-\d{2})#", plan.get("decision_id", ""))
+        date_str = m.group(1) if m else "today"
     has_swaps = len(plan.get("plan_a", [])) > 0
     fallback_used = force_fallback
     model_used = "STATIC_TEMPLATE_FALLBACK"
@@ -166,7 +187,7 @@ def draft_notice(
             language=language,
             stage=stage,
             plan_summary=plan,
-            ack_link=ack_link
+            link=link
         )
         if bedrock_result:
             notice_text = bedrock_result
@@ -178,13 +199,14 @@ def draft_notice(
         fallback_used = True
         model_used = "STATIC_TEMPLATE_FALLBACK"
         lang_dict = STATIC_NOTICES.get(language, STATIC_NOTICES["english"])
+        verify_line = lang_dict["verify_line"].format(url=link) if link else ""
 
         if audience == "parents":
             template = lang_dict["parents_plan_a"] if has_swaps else lang_dict["parents_plan_b"]
-            notice_text = template.format(stage=stage, ack_link=ack_link)
+            notice_text = template.format(stage=stage, verify_line=verify_line)
         else:
             template = lang_dict["teachers"]
-            notice_text = template.format(stage=stage, date=date_str, roster_link=f"https://saans.delhi.gov.in/roster/{decision_id}")
+            notice_text = template.format(stage=stage, date=date_str, verify_line=verify_line)
 
     # Build WhatsApp Click-to-Share link
     encoded_text = urllib.parse.quote(notice_text)
@@ -195,7 +217,8 @@ def draft_notice(
         "language": language,
         "notice_text": notice_text,
         "whatsapp_click_to_share_url": whatsapp_share_url,
-        "ack_link": ack_link,
+        "verify_url": link,
+        "facts": plan_facts(plan),
         "model_used": model_used,
         "fallback_used": fallback_used
     }
@@ -203,14 +226,15 @@ def draft_notice(
 
 def generate_parent_broadcast_package(
     plan: Dict[str, Any],
-    stage: str = "III"
+    stage: str = "III",
+    receipt_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Creates complete bilingual notice package for WhatsApp distribution.
     """
-    eng_notice = draft_notice(plan, audience="parents", language="english", stage=stage)
-    hin_notice = draft_notice(plan, audience="parents", language="hindi", stage=stage)
-    teacher_notice = draft_notice(plan, audience="teachers", language="english", stage=stage)
+    eng_notice = draft_notice(plan, audience="parents", language="english", stage=stage, receipt_id=receipt_id)
+    hin_notice = draft_notice(plan, audience="parents", language="hindi", stage=stage, receipt_id=receipt_id)
+    teacher_notice = draft_notice(plan, audience="teachers", language="english", stage=stage, receipt_id=receipt_id)
 
     return {
         "english": eng_notice,

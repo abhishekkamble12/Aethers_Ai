@@ -18,7 +18,6 @@ from services.drills.drills_simulator import FailureDrillsSimulator
 from services.planner.handler import rehearse_handler
 from services.audit.hash_chain import GENESIS_HASH, create_audit_row, verify_audit_chain
 from services.planner.standing_order import StandingOrderManager
-from services.drills.tenant_scale_sim import simulate_1000_tenants_scaling
 
 def main():
     print("=" * 80)
@@ -29,14 +28,12 @@ def main():
     print("\n[STEP 1] Running AI Circular Extraction Benchmark on Gold & Hostile Sets...")
     eval_summary = run_gold_evaluation()
     metrics = eval_summary["metrics"]
-    print(f" -> Rule Precision:            {metrics['rule_precision_pct']}%")
-    print(f" -> Rule Recall:               {metrics['rule_recall_pct']}%")
+    print(f" -> Measures:                  {eval_summary['what_this_measures']}")
+    print(f" -> Gold rules accepted:       {metrics['gold_rules_accepted']}")
     print(f" -> Verbatim Quote Validity:   {metrics['verbatim_quote_validity_pct']}%")
-    print(f" -> Prompt Injection Refusal:  {metrics['prompt_injection_refusal_rate_pct']}%")
-    print(f" -> Invented Quote Refusal:    {metrics['hallucinated_quote_refusal_rate_pct']}%")
-    print(f" -> Textract OCR Resilience:   {metrics['textract_ocr_noise_resilience_pct']}%")
-    for res in eval_summary["results"]:
-        print(f"    * [{res['status']}] {res['case_name']}")
+    print(f" -> Prompt Injection Refused:  {metrics['prompt_injection_refused']}")
+    print(f" -> Invented Quote Refused:    {metrics['invented_quote_refused']}")
+    print(f" -> Known gaps:                {eval_summary['known_gaps']}")
 
     # 2. Failure Drill 1: Bedrock IAM Denied
     print("\n[STEP 2] Executing Failure Drill 1: Bedrock IAM AccessDenied Fallback...")
@@ -114,14 +111,6 @@ def main():
     so_res = so_mgr.evaluate_standing_order("TENANT#dps", declared_stage="III")
     print(f" -> Standing Order Triggered: {so_res['triggered']}")
     print(f" -> Pre-Authorized Action:   {so_res['action']} ({so_res['policy']})")
-
-    # 9. P2 Feature: 1,000 Synthetic Tenants Scalability
-    print("\n[STEP 9] [P2 Feature] Simulating 1,000 Synthetic Tenants Scale & Latency...")
-    scale_bench = simulate_1000_tenants_scaling(1000)
-    print(f" -> Total Schools Planned:    {scale_bench['total_tenants_processed']}")
-    print(f" -> Total Execution Time:     {scale_bench['elapsed_seconds']}s (Avg: {scale_bench['average_latency_ms']}ms / school)")
-    print(f" -> Delhi Students Protected: {scale_bench['total_delhi_students_protected']:,}")
-    print(f" -> Partition Status:         {scale_bench['concurrency_status']}")
 
     print("\n" + "=" * 80)
     print("🎯 ALL DAY 3 GATES & P2 DELIVERABLES VERIFIED AND READY FOR FEATURE FREEZE!")
