@@ -8,7 +8,7 @@ Globals:
     CodeUri: .lambda_src/
     Timeout: 30
     MemorySize: 512
-    Runtime: python3.11
+    Runtime: python3.12
     Environment:
       Variables:
         TABLE_NAME: !Ref SaansTable
