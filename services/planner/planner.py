@@ -123,6 +123,18 @@ def _plan_b(orig_row: Dict[str, Any], bad_period: Dict[str, Any], index: int) ->
     }
 
 
+def sensitivity_multiplier(sensitive_count: int, policy: Dict[str, Any]) -> float:
+    # Capped at 1.0: a misconfigured policy can make limits stricter, never laxer.
+    return round(min(1.0, max(policy.get("floor", 0.6), 1.0 - policy.get("per_student", 0.05) * sensitive_count)), 3)
+
+
+def stricter_ruleset(ruleset: Dict[str, Any], multiplier: float) -> Dict[str, Any]:
+    """Same rules; forecast thresholds scaled down. Order-based bans are untouched (only stricter, never laxer)."""
+    base = ruleset.get("advisory_pm25", {"advisory_at": 90, "restricted_at": 120})
+    return {**ruleset, "advisory_pm25": {"advisory_at": round(base.get("advisory_at", 90) * multiplier, 1),
+                                         "restricted_at": round(base.get("restricted_at", 120) * multiplier, 1)}}
+
+
 def homeroom(timetable: List[Dict[str, Any]], cls: str, exclude=frozenset()) -> Optional[str]:
     """The indoor venue a class uses most (its classroom). `exclude` holds (class, period) slots that are
     being moved indoors: their venue is the outdoor ground they are leaving, not a classroom."""
@@ -133,7 +145,8 @@ def homeroom(timetable: List[Dict[str, Any]], cls: str, exclude=frozenset()) -> 
     return max(sorted(counts), key=counts.get) if counts else None
 
 
-def assign_indoor_venues(plan_b_fallbacks, final_timetable, forecast_map, venues, indoor_air, class_sizes) -> None:
+def assign_indoor_venues(plan_b_fallbacks, final_timetable, forecast_map, venues, indoor_air, class_sizes,
+                         sensitive_counts=None) -> None:
     """
     X2: indoors is not automatically safe. For each Plan B session, model indoor PM2.5 in every candidate
     venue (outdoor forecast x infiltration factor for its ventilation, a labelled assumption), skip venues
@@ -148,7 +161,9 @@ def assign_indoor_venues(plan_b_fallbacks, final_timetable, forecast_map, venues
         if (r["class"], r["period"]) not in moving and r.get("venue"):
             busy.setdefault((r["venue"], r["period"]), r["class"])
 
-    for b in sorted(plan_b_fallbacks, key=lambda x: (x["period"], x["class"])):
+    sensitive_counts = sensitive_counts or {}
+    # X3: within a period, classes with more sensitive students choose rooms first
+    for b in sorted(plan_b_fallbacks, key=lambda x: (x["period"], -sensitive_counts.get(x["class"], 0), x["class"])):
         prd, cls = b["period"], b["class"]
         outdoor_pm = forecast_map.get(prd, {"nominal": 150.0})["nominal"]
         students = class_sizes.get(cls)
@@ -232,7 +247,9 @@ def plan_schedule(
     day: Optional[str] = None,
     venues: Optional[List[Dict[str, Any]]] = None,
     indoor_air: Optional[Dict[str, Any]] = None,
-    class_sizes: Optional[Dict[str, int]] = None
+    class_sizes: Optional[Dict[str, int]] = None,
+    sensitive_counts: Optional[Dict[str, int]] = None,
+    sensitivity_policy: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Executes the deterministic planner:
@@ -258,6 +275,20 @@ def plan_schedule(
 
     input_conflicts = [describe_conflict(k, v).replace(" would be", " is") for k, v in sorted(find_conflicts(timetable).items())]
 
+    # X3: classes with sensitive students get stricter forecast thresholds (policy, configurable)
+    sensitive_counts = sensitive_counts or {}
+    class_rules: Dict[str, Dict[str, Any]] = {}
+    sensitivity: Dict[str, Dict[str, Any]] = {}
+    for cls in {p["class"] for p in timetable}:
+        n = int(sensitive_counts.get(cls, 0))
+        if n > 0 and sensitivity_policy:
+            mult = sensitivity_multiplier(n, sensitivity_policy)
+            class_rules[cls] = stricter_ruleset(ruleset, mult)
+            sensitivity[cls] = {"sensitive_count": n, "threshold_multiplier": mult,
+                                **class_rules[cls]["advisory_pm25"], "basis": sensitivity_policy.get("basis", "policy")}
+        else:
+            class_rules[cls] = ruleset
+
     # 1. Build forecast lookup
     forecast_map = {}
     for fp in forecast.get("periods", []):
@@ -274,7 +305,7 @@ def plan_schedule(
         classified = classify_period(
             period=p,
             forecast_pm25=fc["nominal"],
-            ruleset=ruleset,
+            ruleset=class_rules[p["class"]],
             declared_stage=declared_stage,
             school_jurisdiction=school_jurisdiction
         )
@@ -290,6 +321,8 @@ def plan_schedule(
         cp for cp in classified_periods
         if cp.get("is_outdoor") and cp.get("label") in ("banned", "restricted")
     ]
+    # X3: classes with more sensitive students get first pick of clean slots (stable otherwise)
+    problematic_periods.sort(key=lambda cp: -sensitive_counts.get(cp["class"], 0))
 
     if not problematic_periods:
         # All periods allowed: no changes needed
@@ -335,6 +368,11 @@ def plan_schedule(
             "label": bad_period["label"], "reason": bad_period["reason"], "rule_ids": bad_period.get("rule_ids", []),
             "forecast_pm25": orig_fc, "candidates": [], "outcome": None,
         }
+        if cls_id in sensitivity:
+            sv = sensitivity[cls_id]
+            trace["sensitivity"] = {**sv, "applied": (
+                f"stricter threshold applied: {sv['sensitive_count']} sensitive student{'s' if sv['sensitive_count'] != 1 else ''} "
+                f"(x{sv['threshold_multiplier']}: advisory {sv['advisory_at']}, restricted {sv['restricted_at']} \u00b5g/m\u00b3)")}
 
         best_partner, best_score = None, None
         for candidate in [p for p in working_timetable if p["class"] == cls_id and p["period"] != orig_prd_id]:
@@ -355,7 +393,7 @@ def plan_schedule(
                 for kind in ("nominal", "pessimistic"):
                     c = classify_period(
                         period={**orig_row, "period": target_prd_id, "start": candidate["start"], "end": candidate["end"]},
-                        forecast_pm25=target_fc[kind], ruleset=ruleset, declared_stage=declared_stage,
+                        forecast_pm25=target_fc[kind], ruleset=class_rules[cls_id], declared_stage=declared_stage,
                         school_jurisdiction=school_jurisdiction
                     )
                     if c["label"] in ("banned", "restricted"):
@@ -431,7 +469,8 @@ def plan_schedule(
     # X2: place each Plan B session in the cleanest free indoor venue (modelled, labelled assumption)
     indoor_exposure = None
     if venues is not None and indoor_air is not None:
-        assign_indoor_venues(plan_b_fallbacks, working_timetable, forecast_map, venues, indoor_air, class_sizes or {})
+        assign_indoor_venues(plan_b_fallbacks, working_timetable, forecast_map, venues, indoor_air, class_sizes or {},
+                             sensitive_counts)
         traces = {(t["class"], t["period"]): t for t in decision_trace}
         indoor_exposure = 0.0
         for b in plan_b_fallbacks:

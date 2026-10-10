@@ -105,7 +105,8 @@ class TestDemoSchool(unittest.TestCase):
             trace = next(t for t in d["decision_trace"] if (t["class"], t["period"]) == (b["class"], b["period"]))
             self.assertEqual(trace["outcome"]["venue"], ch["venue_id"])
         p2 = {b["class"]: b["fallback_venue"] for b in d["plan_b"] if b["period"] == "P2"}
-        self.assertEqual(p2, {"7A": "Hall_A", "7B": "Gym"})
+        # X3: 7B has students with respiratory conditions, so it chooses first and gets the purifier hall.
+        self.assertEqual(p2, {"7B": "Hall_A", "7A": "Gym"})
 
     def test_rehearsal_includes_venue_choice(self):
         import json

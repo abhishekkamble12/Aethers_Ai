@@ -1,11 +1,11 @@
 {
-  "note": "Class-level counts only. No names, roll numbers or any per-child data.",
+  "note": "Class-level counts only. No names, roll numbers or any per-child data. sensitive_count = students with asthma or another respiratory condition, as reported by the school nurse in aggregate.",
   "classes": [
-    {"class": "6A", "students": 38},
-    {"class": "7A", "students": 40},
-    {"class": "7B", "students": 39},
-    {"class": "8A", "students": 42},
-    {"class": "9A", "students": 36},
-    {"class": "10A", "students": 35}
+    {"class": "6A", "students": 38, "sensitive_count": 4},
+    {"class": "7A", "students": 40, "sensitive_count": 0},
+    {"class": "7B", "students": 39, "sensitive_count": 2},
+    {"class": "8A", "students": 42, "sensitive_count": 0},
+    {"class": "9A", "students": 36, "sensitive_count": 1},
+    {"class": "10A", "students": 35, "sensitive_count": 0}
   ]
 }

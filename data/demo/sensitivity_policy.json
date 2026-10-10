@@ -1,0 +1,6 @@
+{
+  "basis": "policy",
+  "note": "School policy, not a medical standard: forecast thresholds for a class are multiplied by max(floor, 1 - per_student x sensitive_count). Stage-level bans from orders are never relaxed by this; it only makes forecast limits stricter.",
+  "per_student": 0.05,
+  "floor": 0.6
+}

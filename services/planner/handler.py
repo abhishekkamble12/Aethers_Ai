@@ -56,11 +56,40 @@ def _get_school_config() -> Dict[str, Any]:
     def load(name):
         with open(os.path.join(demo, name), "r", encoding="utf-8") as f:
             return json.load(f)
+    profiles = validate_class_profiles(load("class_profiles.json")["classes"])
     return {
         "venues": load("venues.json")["venues"],
         "indoor_air": load("indoor_air.json"),
-        "class_sizes": {c["class"]: c["students"] for c in load("class_profiles.json")["classes"]},
+        "class_sizes": {c["class"]: c["students"] for c in profiles},
+        "sensitive_counts": {c["class"]: c.get("sensitive_count", 0) for c in profiles},
+        "sensitivity_policy": load("sensitivity_policy.json"),
     }
+
+
+PROFILE_FIELDS = {"class", "students", "sensitive_count"}
+
+
+def validate_class_profiles(classes):
+    """Class profiles hold counts only. Anything else (names, roll numbers, conditions per child) is refused."""
+    for c in classes:
+        extra = set(c) - PROFILE_FIELDS
+        if extra:
+            raise ValueError(f"class profile for {c.get('class')!r} has non-count fields {sorted(extra)}; counts only")
+        n, total = c.get("sensitive_count", 0), c.get("students")
+        if not isinstance(total, int) or total <= 0 or not isinstance(n, int) or not 0 <= n <= total:
+            raise ValueError(f"class profile for {c.get('class')!r} needs integer students > 0 and 0 <= sensitive_count <= students")
+    return classes
+
+
+def redact_sensitive_counts(plan: Dict[str, Any]) -> Dict[str, Any]:
+    """Public responses keep the stricter thresholds but not how many children in a class have a condition."""
+    for t in plan.get("decision_trace", []):
+        sv = t.get("sensitivity")
+        if sv:
+            sv["sensitive_count"] = "redacted"
+            sv["applied"] = (f"stricter threshold applied for students with respiratory conditions "
+                             f"(advisory {sv['advisory_at']}, restricted {sv['restricted_at']} \u00b5g/m\u00b3)")
+    return plan
 
 
 def normalise_stage(raw: Any) -> str:
@@ -122,7 +151,10 @@ def run_planner(run: Dict[str, str], execution: str = "") -> Dict[str, Any]:
         "exposure_before": plan_result["exposure_before"],
         "exposure_after": plan_result["exposure_after"],
         "pe_minutes_preserved": plan_result["pe_minutes_preserved"],
-        "indoor_air_assumptions": _get_school_config()["indoor_air"]["infiltration"]
+        "indoor_air_assumptions": _get_school_config()["indoor_air"]["infiltration"],
+        # Policy only: per-class sensitive counts never enter the public audit chain.
+        "sensitivity_policy": {k: v for k, v in _get_school_config()["sensitivity_policy"].items() if k != "note"},
+        "classes_with_stricter_limits": sum(1 for t in plan_result.get("decision_trace", []) if t.get("sensitivity"))
     }
 
     audit_row, receipt_id = None, None
@@ -203,4 +235,4 @@ def rehearse_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         **_get_school_config()
     )
     plan_result["declared_stage"] = stage
-    return respond(200, plan_result)
+    return respond(200, redact_sensitive_counts(plan_result))

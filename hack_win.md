@@ -205,6 +205,14 @@ The state machine in `services/workflow/state_machine.json` is not deployed (the
 > - **Demo, Stage III:** every class is moved to a room with lower modelled PM2.5. In P2, 7A gets Hall_A (84 vs 280 outdoors) and 7B gets the Gym (140), because the hall is taken.
 > - **Evidence:** `tests/test_indoor_air.py` 10/10. It caught a real bug: the outdoor ground was being offered as a "classroom". Full suite 131/131.
 
+> **X3 status: DONE locally (tested; deploys with the rest).**
+> - **Data:** `class_profiles.json` adds `sensitive_count` per class (counts only; the loader refuses any other field or a count above class size). `sensitivity_policy.json` holds thresholds × max(floor 0.6, 1 − 0.05 × count), `basis: policy`, capped at 1.0 so it can never loosen a limit. Stage bans from orders are unaffected.
+> - **Priority:** sensitive classes choose slots first, and rooms first within a period.
+> - **Explained:** the trace says "stricter threshold applied: 4 sensitive students (×0.8: advisory 72.0, restricted 96.0 µg/m³)".
+> - **Demo, Stage II:** 6A (4 sensitive) refuses P8 because its pessimistic 114 is over its limit of 96, so it gets the purifier hall, which frees P8 for 7A to keep outdoor PE. Stage III P2: 7B (2 sensitive) gets Hall_A before 7A.
+> - **Privacy:** per-class counts appear only in admin responses (the plan behind `GET /decisions`). Public `/rehearse` redacts them, and the public audit chain records only the policy and how many classes got stricter limits.
+> - **Evidence:** `tests/test_sensitive_first.py` 9/9; full suite 140/140.
+
 These replace U4 (S3 Object Lock is **dropped**; keep only the receipt QR code). Each must run on AWS on camera, or it stays out of the video.
 
 | # | X-factor | Build | Rules | Time-box |
