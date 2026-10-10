@@ -71,6 +71,7 @@ Resources:
   IngestPlannerFunction:
     Type: AWS::Serverless::Function
     Properties:
+      CodeUri: .lambda_src/
       Handler: services.planner.handler.lambda_handler
       Description: LoadContext step - classifies periods and generates Plan A/B (invoked by SaansWorkflow)
       Policies:
@@ -81,6 +82,7 @@ Resources:
   RehearseFunction:
     Type: AWS::Serverless::Function
     Properties:
+      CodeUri: .lambda_src/
       Handler: services.planner.handler.rehearse_handler
       Description: Instant re-plan simulator for Stage I-IV rehearsal slider
       Events:
@@ -94,6 +96,7 @@ Resources:
   ApprovalFunction:
     Type: AWS::Serverless::Function
     Properties:
+      CodeUri: .lambda_src/
       Handler: services.workflow.handler.approval_handler
       Description: POST /approve/{shortId} - consumes a role-bound token and resumes the paused workflow
       Policies:
@@ -117,6 +120,7 @@ Resources:
   ReceiptVerifyFunction:
     Type: AWS::Serverless::Function
     Properties:
+      CodeUri: .lambda_src/
       Handler: services.audit.handler.receipt_handler
       Description: GET /receipts/{id} - tenant hash chain from DynamoDB for in-browser verification
       Policies:
@@ -133,6 +137,7 @@ Resources:
   VerifyPageFunction:
     Type: AWS::Serverless::Function
     Properties:
+      CodeUri: .lambda_src/
       Handler: services.audit.handler.verify_page_handler
       Description: GET /verify/{id} - self-contained receipt verification page
       MemorySize: 128
@@ -147,6 +152,7 @@ Resources:
   HealthFunction:
     Type: AWS::Serverless::Function
     Properties:
+      CodeUri: .lambda_src/
       Handler: services.health.handler.health_handler
       Description: GET /health - what works right now (ok / degraded / down)
       Environment:
@@ -167,10 +173,28 @@ Resources:
             Path: /health
             Method: get
 
+  # 5d. Hourly forecast chart API
+  ForecastFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .lambda_src/
+      Handler: services.forecast.handler.forecast_handler
+      Description: GET /forecast - hourly PM2.5 chart data with product thresholds
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SaansTable
+      Events:
+        ForecastApi:
+          Type: Api
+          Properties:
+            Path: /forecast
+            Method: get
+
   # 6. Bilingual Notification & WhatsApp Dispatch Function
   NotificationFunction:
     Type: AWS::Serverless::Function
     Properties:
+      CodeUri: .lambda_src/
       Handler: services.notify.handler.notify_handler
       Description: DraftAndDispatchNotices step - bilingual notices (Bedrock or static template) with receipt link
       Environment:
@@ -185,6 +209,7 @@ Resources:
   RequestApprovalFunction:
     Type: AWS::Serverless::Function
     Properties:
+      CodeUri: .lambda_src/
       Handler: services.workflow.request.request_approval_handler
       Description: Stores the task token behind a short, role-bound, expiring approval ID
       Policies:
@@ -195,6 +220,7 @@ Resources:
   DecisionsFunction:
     Type: AWS::Serverless::Function
     Properties:
+      CodeUri: .lambda_src/
       Handler: services.workflow.decisions.decisions_handler
       Description: GET /decisions - plan, explanations and the pending approval link
       Environment:
@@ -210,10 +236,49 @@ Resources:
             Path: /decisions
             Method: get
 
+  # 8b. Forecast Watch scheduled evaluator
+  WatchFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .lambda_src/
+      Handler: services.forecast.watch.watch_handler
+      Description: Daily proactive forecast watch contingency evaluation (16:30 IST)
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SaansTable
+      Events:
+        DailySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: "cron(0 11 * * ? *)"
+            Description: Run daily at 16:30 IST (11:00 UTC)
+
+  # 8c. Forecast Watch API (admin key)
+  WatchApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .lambda_src/
+      Handler: services.forecast.handler.watch_get_handler
+      Description: GET /watch - contingency drafts and promotion hint
+      Environment:
+        Variables:
+          ADMIN_API_KEY: !Ref AdminApiKey
+          TRIGGER_FUNCTION_NAME: !Ref TriggerFunction
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref SaansTable
+      Events:
+        WatchApi:
+          Type: Api
+          Properties:
+            Path: /watch
+            Method: get
+
   # 9. Workflow audit steps (interim until hack_win M3: logs only)
   AuditFunction:
     Type: AWS::Serverless::Function
     Properties:
+      CodeUri: .lambda_src/
       Handler: services.audit.handler.audit_event_handler
       Description: Audit close / fail-safe steps of SaansWorkflow
       Policies:
@@ -246,6 +311,7 @@ Resources:
   TriggerFunction:
     Type: AWS::Serverless::Function
     Properties:
+      CodeUri: .lambda_src/
       Handler: services.workflow.trigger.trigger_handler
       Description: Starts SaansWorkflow idempotently (one execution per tenant/date/session)
       Environment:

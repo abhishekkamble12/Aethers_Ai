@@ -26,13 +26,7 @@ def _table():
     return boto3.resource("dynamodb").Table(os.environ["TABLE_NAME"])
 
 
-def _require_admin(event: Dict[str, Any]) -> None:
-    expected = os.environ.get("ADMIN_API_KEY", "")
-    if not expected:
-        raise ApiError(503, "not_configured", "ADMIN_API_KEY is not configured.")
-    supplied = header(event, "x-saans-admin-key") or ""
-    if not hmac.compare_digest(supplied.encode(), expected.encode()):
-        raise ApiError(401, "unauthorized", "Missing or invalid x-saans-admin-key header.")
+from services.common.auth import require_admin as _require_admin
 
 
 def _base_url(event: Dict[str, Any]) -> str:

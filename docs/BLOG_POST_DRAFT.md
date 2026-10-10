@@ -69,7 +69,7 @@ Across our gold set of official circulars and adversarial test fixtures:
 ---
 
 ## 5. Limitations & Future Work
-1. **Forecast Accuracy:** Saans relies on SAFAR-IITM forecast feeds; localized micro-climate variations may occur.
+1. **Forecast Accuracy:** Saans uses the CAMS model forecast via Open-Meteo for one grid point, not a ground station; local variations may occur. When the live feed fails it falls back to a labelled, hand-built replay scenario.
 2. **WhatsApp API Registration:** For production pilot deployment, official Meta WhatsApp Business API and DLT message templates are required.
 3. **Field Pilot:** Ready for field validation in Delhi schools during the upcoming November 2026 pollution season.
 

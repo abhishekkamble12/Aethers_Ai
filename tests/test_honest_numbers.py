@@ -120,5 +120,56 @@ class TestNoFabricatedScale(unittest.TestCase):
         self.assertNotIn("/notifications/dispatch", tpl)
 
 
+class TestHonestParentSentence(unittest.TestCase):
+
+    def setUp(self):
+        from services.planner.handler import _get_school_config
+        self.tt, self.fc, self.rs = _get_demo_fixtures()
+        self.cfg = _get_school_config()
+        self.stage3_plan = plan_schedule(
+            self.tt, self.fc, self.rs, "III",
+            venues=self.cfg["venues"],
+            indoor_air=self.cfg["indoor_air"],
+            class_sizes=self.cfg["class_sizes"],
+            sensitive_counts=self.cfg["sensitive_counts"],
+            sensitivity_policy=self.cfg["sensitivity_policy"]
+        )
+
+    def test_stage3_demo_gives_percentage_between_60_and_80(self):
+        facts = drafting.plan_facts(self.stage3_plan)
+        pct = facts["indoor_air_reduction_pct_modelled"]
+        self.assertIsNotNone(pct)
+        self.assertGreaterEqual(pct, 60)
+        self.assertLessEqual(pct, 80)
+
+    def test_modelled_or_anuman_word_is_present_in_notice(self):
+        n_en = drafting.draft_notice(self.stage3_plan, audience="parents", language="english", force_fallback=True)
+        self.assertIn("modelled", n_en["notice_text"])
+        self.assertIn("lower PM2.5 than outdoors", n_en["notice_text"])
+
+        n_hi = drafting.draft_notice(self.stage3_plan, audience="parents", language="hindi", force_fallback=True)
+        self.assertIn("अनुमान", n_hi["notice_text"])
+        self.assertIn("कम PM2.5 है", n_hi["notice_text"])
+
+    def test_no_plan_b_means_no_sentence(self):
+        plan_no_b = {
+            "decision_id": "TENANT#demo#2026-10-12#MORN",
+            "plan_a": [{"from": "P1"}],
+            "plan_b": [],
+            "pe_minutes": {"scheduled": 40, "kept_active": 40}
+        }
+        n = drafting.draft_notice(plan_no_b, audience="parents", language="english", force_fallback=True)
+        self.assertIsNone(n["facts"]["indoor_air_reduction_pct_modelled"])
+        self.assertNotIn("estimated", n["notice_text"])
+        self.assertNotIn("modelled", n["notice_text"])
+
+    def test_no_micrograms_symbol_anywhere_in_notices(self):
+        for aud in ("parents", "teachers"):
+            for lang in ("english", "hindi"):
+                n = drafting.draft_notice(self.stage3_plan, audience=aud, language=lang, force_fallback=True)
+                self.assertNotIn("µg", n["notice_text"])
+                self.assertNotIn("ug/m", n["notice_text"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -175,7 +175,8 @@ def run_planner(run: Dict[str, str], execution: str = "") -> Dict[str, Any]:
         "indoor_air_assumptions": _get_school_config()["indoor_air"]["infiltration"],
         # Policy only: per-class sensitive counts never enter the public audit chain.
         "sensitivity_policy": {k: v for k, v in _get_school_config()["sensitivity_policy"].items() if k != "note"},
-        "classes_with_stricter_limits": sum(1 for t in plan_result.get("decision_trace", []) if t.get("sensitivity"))
+        "classes_with_stricter_limits": len({t["class"] for t in plan_result.get("decision_trace", [])
+                                             if t.get("sensitivity")})
     }
 
     audit_row, receipt_id = None, None

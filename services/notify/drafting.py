@@ -27,32 +27,36 @@ STATIC_NOTICES = {
         "parents_plan_b": (
             "Dear Parents, In compliance with GRAP Stage {stage} directives, outdoor sports and physical education "
             "today are replaced by indoor physical sessions (yoga, table tennis, fitness circuits) so children stay "
-            "active away from polluted air.{verify_line}"
+            "active away from polluted air.{indoor_sentence}{verify_line}"
         ),
         "parents_plan_a": (
             "Dear Parents, Because of high air pollution under GRAP Stage {stage}, some outdoor physical activity "
-            "periods today have been moved to times with lower forecast pollution. No classes are cancelled.{verify_line}"
+            "periods today have been moved to times with lower forecast pollution. No classes are cancelled.{indoor_sentence}{verify_line}"
         ),
         "teachers": (
             "Notice to Teachers: Today's timetable ({date}) has been updated under GRAP Stage {stage}. "
-            "PE staff: please run the assigned indoor physical sessions in the indoor venues listed in today's plan.{verify_line}"
+            "PE staff: please run the assigned indoor physical sessions in the indoor venues listed in today's plan.{teacher_sentence}{verify_line}"
         ),
+        "indoor_sentence": " Indoor sessions are in rooms with an estimated {pct}% lower PM2.5 than outdoors (modelled from ventilation type, not measured).",
+        "teacher_sentence": " Stricter limits applied to {count} classes with sensitive students.",
         "verify_line": " Verify this decision: {url}",
     },
     "hindi": {
         "parents_plan_b": (
             "आदरणीय अभिभावक, ग्रैप स्टेज {stage} के निर्देशों के अनुसार, "
             "आज खेल-कूद की बाहरी गतिविधियों की जगह इनडोर शारीरिक सत्र (योग, टेबल टेनिस, व्यायाम) होंगे, "
-            "ताकि बच्चे प्रदूषित हवा से दूर सक्रिय रहें।{verify_line}"
+            "ताकि बच्चे प्रदूषित हवा से दूर सक्रिय रहें।{indoor_sentence}{verify_line}"
         ),
         "parents_plan_a": (
             "आदरणीय अभिभावक, ग्रैप स्टेज {stage} के तहत वायु प्रदूषण अधिक होने के कारण आज कुछ शारीरिक गतिविधि के पीरियड "
-            "कम प्रदूषण वाले समय पर किए गए हैं। कोई कक्षा रद्द नहीं की गई है।{verify_line}"
+            "कम प्रदूषण वाले समय पर किए गए हैं। कोई कक्षा रद्द नहीं की गई है।{indoor_sentence}{verify_line}"
         ),
         "teachers": (
             "शिक्षकों के लिए सूचना: ग्रैप स्टेज {stage} के अनुसार आज ({date}) की समय सारिणी अपडेट की गई है। "
-            "पीई शिक्षक आज की योजना में दिए गए इनडोर सत्र लें।{verify_line}"
+            "पीई शिक्षक आज की योजना में दिए गए इनडोर सत्र लें।{teacher_sentence}{verify_line}"
         ),
+        "indoor_sentence": " इनडोर सत्र ऐसे कमरों में होंगे जहाँ बाहर की तुलना में अनुमानित {pct}% कम PM2.5 है (वेंटिलेशन के आधार पर अनुमान, मापा नहीं गया)।",
+        "teacher_sentence": " संवेदनशील छात्रों वाली {count} कक्षाओं के लिए सख्त सीमाएँ लागू की गई हैं।",
         "verify_line": " इस निर्णय की जाँच करें: {url}",
     }
 }
@@ -66,12 +70,31 @@ def verify_url(receipt_id: Optional[str], public_base_url: Optional[str] = None)
 def plan_facts(plan: Dict[str, Any]) -> Dict[str, Any]:
     """The only facts a notice may state, all read from the approved plan."""
     pe = plan.get("pe_minutes") or {}
+
+    # Calculate indoor_air_reduction_pct_modelled over Plan B sessions with chosen venue
+    reductions = []
+    for b in plan.get("plan_b", []):
+        vc = b.get("venue_choice") or {}
+        chosen = vc.get("chosen")
+        outdoor = vc.get("outdoor_pm25_forecast")
+        if chosen and outdoor and float(outdoor) > 0:
+            indoor = float(chosen.get("indoor_pm25_modelled", outdoor))
+            reductions.append((float(outdoor) - indoor) / float(outdoor) * 100.0)
+
+    indoor_reduction = round(sum(reductions) / len(reductions)) if reductions else None
+
+    # Distinct classes whose plan used a stricter (sensitive-student) limit. The planner records this per
+    # flagged period in decision_trace[].sensitivity; it has no top-level "sensitivity" key.
+    classes_with_stricter = len({t.get("class") for t in plan.get("decision_trace", []) if t.get("sensitivity")})
+
     return {
         "periods_moved": len(plan.get("plan_a", [])),
         "periods_replaced_indoor": len(plan.get("plan_b", [])),
         "pe_minutes_scheduled": pe.get("scheduled"),
         "pe_minutes_kept_active": pe.get("kept_active"),
         "modelled_exposure_reduction_pct": plan.get("exposure_reduction_pct"),
+        "indoor_air_reduction_pct_modelled": indoor_reduction,
+        "classes_with_stricter_limits": classes_with_stricter,
     }
 
 
@@ -195,18 +218,24 @@ def draft_notice(
             fallback_used = False
 
     # 2. Static template fallback (circuit breaker)
+    facts = plan_facts(plan)
     if notice_text is None:
         fallback_used = True
         model_used = "STATIC_TEMPLATE_FALLBACK"
         lang_dict = STATIC_NOTICES.get(language, STATIC_NOTICES["english"])
         verify_line = lang_dict["verify_line"].format(url=link) if link else ""
 
+        pct = facts["indoor_air_reduction_pct_modelled"]
+        count = facts["classes_with_stricter_limits"]
+        indoor_sentence = (lang_dict["indoor_sentence"].format(pct=pct)) if pct is not None else ""
+        teacher_sentence = (lang_dict["teacher_sentence"].format(count=count)) if count > 0 else ""
+
         if audience == "parents":
             template = lang_dict["parents_plan_a"] if has_swaps else lang_dict["parents_plan_b"]
-            notice_text = template.format(stage=stage, verify_line=verify_line)
+            notice_text = template.format(stage=stage, indoor_sentence=indoor_sentence, verify_line=verify_line)
         else:
             template = lang_dict["teachers"]
-            notice_text = template.format(stage=stage, date=date_str, verify_line=verify_line)
+            notice_text = template.format(stage=stage, date=date_str, teacher_sentence=teacher_sentence, verify_line=verify_line)
 
     # Build WhatsApp Click-to-Share link
     encoded_text = urllib.parse.quote(notice_text)

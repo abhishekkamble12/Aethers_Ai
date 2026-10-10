@@ -3,7 +3,7 @@
   "date": "2026-10-12",
   "generated_at": "2026-10-11T20:00:00Z",
   "declared_stage": "III",
-  "model": "SAFAR-IITM-Ensemble",
+  "model": "Illustrative Stage III scenario (hand-built, not a model forecast)",
   "is_replay": true,
   "periods": [
     { "period": "P1", "start": "08:30", "end": "09:10", "pm25_nominal": 210, "pm25_pessimistic": 252, "category": "Very Poor" },

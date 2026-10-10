@@ -22,6 +22,18 @@ Audited Sat Oct 10, 2026, 16:00 IST. Scope: backend only (`services/`, `infra/`,
 > - The audit chain on AWS shows every notice as `STATIC_TEMPLATE_FALLBACK, fallback_used: true` (Bedrock unavailable), the forecast as `is_replay: true`, and stricter limits for 3 classes.
 > - **Status upgrade:** M1, M2a, M2b, M3a and M3b are now **DONE (deployed and verified on AWS)**.
 >
+> **Final Features Deployed & Verified (Sun Oct 11, 00:35 IST):**
+> - **F3 (Hourly Forecast Chart API - `GET /forecast`):** Deployed to AWS (`ForecastFunction`). Returns 48h CAMS forecast with product thresholds, advisory/restricted crossing detection, and DynamoDB hourly cache (`PK=GRID#...#H48`, `SK=FCST`). Validated live via `curl`.
+> - **F2 (Forecast Watch & `GET /watch`):** Deployed to AWS (`WatchFunction` EventBridge cron daily 16:30 IST + `WatchApiFunction` `GET /watch`). Evaluates next 2 school days, drafts contingency plans, stores `WATCH#{date}` with TTL, appends `CONTINGENCY_DRAFTED` hash-chain audit row on new `act` risk, and requires `x-saans-admin-key`. Validated live with 2 evaluated watches.
+> - **F4 (Honest Parent Sentence): PARTIAL until redeployed.** `services/notify/drafting.py` computes `indoor_air_reduction_pct_modelled` (works) and `classes_with_stricter_limits`. The second one was always 0 on the deployed stack because it read a top-level `sensitivity` key the planner never returns, so the teacher sentence never appeared. Fixed locally on Oct 11 (counts distinct classes in `decision_trace[].sensitivity`, 3 on the demo data) with regression tests in `tests/test_review_regressions.py`. Mark DONE after the next deploy shows the sentence in a live NOTICES_DRAFTED run.
+> - **Test Suite Gate:** full suite passing (`run_all_tests.py`). Count at the Oct 11 review fixes: 193.
+>
+> **Review fixes (Sun Oct 11, local, tested):**
+> - `scripts/test_live_api.py` no longer hardcodes the admin key. It reads `SAANS_ADMIN_KEY`, `ADMIN_API_KEY` or `infra/deploy.secrets`. The key never reached a commit. **Rotate it after the event anyway.**
+> - F2 watch `plan_summary` was always zeros (read `problematic_periods`, `plan_a_swaps`, `plan_b_fallbacks`, which the planner doesn't return). Now reads `classified_periods`, `plan_a`, `plan_b`.
+> - The hand-built replay scenario was labelled `SAFAR-IITM-Ensemble`. It is now labelled as an illustrative scenario, not a model forecast.
+> - `GET /watch` promote hint pointed at `POST /workflow/trigger`, which doesn't exist. It now gives the Trigger Lambda name (`TRIGGER_FUNCTION_NAME`) and one valid payload per `act` date.
+>
 > **Bedrock spike: BLOCKED.** All Nova models return `ValidationException: Operation not allowed`. Cause: the account is on the AWS **Free plan** (`accountPlanType: FREE`, $149.61 credits), and the Nova Lite on-demand quota is **0** tokens and 0 requests per minute. The fix is the owner's decision: upgrade to the Paid plan (credits carry over). Until then X1 and M4 can't produce real model output, and notices use the labelled static fallback.
 > **Billing safety:** an existing "My Zero-Spend Budget" emails on any spend. AWS/Billing metrics aren't available yet, so no separate CloudWatch billing alarm was added.
 
