@@ -6,6 +6,7 @@ Provides:
 """
 
 import logging
+from decimal import Decimal
 import os
 import re
 
@@ -94,7 +95,7 @@ def watch_get_handler(event, context):
         except Exception:
             logger.exception("Failed to query watches for %s", canonical_tenant)
 
-    watches = sorted(watches, key=lambda w: w.get("date", ""))
+    watches = sorted((_plain(w) for w in watches), key=lambda w: w.get("date", ""))
 
     return respond(200, {
         "tenant": tenant,
@@ -103,9 +104,21 @@ def watch_get_handler(event, context):
     })
 
 
+def _plain(value):
+    """DynamoDB returns numbers as Decimal; send counts as JSON numbers, not strings."""
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    if isinstance(value, dict):
+        return {k: _plain(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_plain(v) for v in value]
+    return value
+
+
 def promote_hint(tenant_id: str, watches) -> dict:
     """How a principal turns a contingency draft into a real run. There is no HTTP trigger route:
     runs start only through the Trigger Lambda (the 19:30 IST schedule invokes the same function)."""
+    stack = os.environ.get("STACK_NAME", "saans")
     function_name = os.environ.get("TRIGGER_FUNCTION_NAME") or "<TriggerFunctionName stack output>"
     payloads = [{"tenant_id": tenant_id, "date": w.get("date"), "session": "MORN",
                  "forecast_source": w.get("forecast_source") or "live"}
@@ -116,6 +129,8 @@ def promote_hint(tenant_id: str, watches) -> dict:
                         "Lambda with one of these payloads (duplicates are refused per decision)."),
         "method": "aws lambda invoke",
         "function_name": function_name,
+        "find_function_name": (f"aws cloudformation describe-stacks --stack-name {stack} --query "
+                               f"\"Stacks[0].Outputs[?OutputKey=='TriggerFunctionName'].OutputValue\" --output text"),
         "payloads": payloads,
         "example": (f"aws lambda invoke --function-name {function_name} --cli-binary-format raw-in-base64-out "
                     f"--payload '<payload json>' out.json"),

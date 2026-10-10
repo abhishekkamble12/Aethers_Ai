@@ -263,7 +263,8 @@ Resources:
       Environment:
         Variables:
           ADMIN_API_KEY: !Ref AdminApiKey
-          TRIGGER_FUNCTION_NAME: !Ref TriggerFunction
+          # Referencing the Trigger function here creates a cycle through the REST API; the hint looks its name up instead.
+          STACK_NAME: !Ref AWS::StackName
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref SaansTable

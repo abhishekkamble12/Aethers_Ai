@@ -109,14 +109,27 @@ class TestPromoteHint(unittest.TestCase):
                 mock.patch("services.forecast.handler._get_table", return_value=table):
             r = watch_get_handler({"headers": {"x-saans-admin-key": ADMIN_KEY},
                                    "queryStringParameters": {"tenant": "demo"}}, None)
-        hint = json.loads(r["body"])["promote_hint"]
+        body = json.loads(r["body"])
+        hint = body["promote_hint"]
+        self.assertIsInstance(body["watches"][0]["plan_summary"]["fallbacks_count"], int)
+        self.assertIsInstance(body["watches"][0]["peak_pm25"], (int, float))
         self.assertNotIn("/workflow/trigger", json.dumps(hint))
         self.assertEqual(hint["function_name"], "saans-TriggerFunction-abc")
         self.assertIn("saans-TriggerFunction-abc", hint["example"])
+        self.assertIn("OutputKey=='TriggerFunctionName'", hint["find_function_name"])
         self.assertEqual([p["date"] for p in hint["payloads"]], ["2026-10-13", "2026-10-14"])
         for payload in hint["payloads"]:
             run = parse_run_input(payload)  # the Trigger Lambda accepts exactly this
             self.assertEqual(run["tenant_id"], "TENANT#demo")
+
+
+class TestTemplateHasNoTriggerCycle(unittest.TestCase):
+    """!Ref TriggerFunction from an API-backed function creates a CloudFormation dependency cycle."""
+
+    def test_watch_api_does_not_reference_trigger_function(self):
+        tpl = (ROOT / "infra" / "template.yaml").read_text(encoding="utf-8")
+        watch_api = tpl.split("  WatchApiFunction:")[1].split(chr(10) + "  # ")[0]
+        self.assertNotIn("!Ref TriggerFunction", watch_api)
 
 
 class TestNoSecretsInScripts(unittest.TestCase):
