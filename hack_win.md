@@ -159,7 +159,22 @@ The state machine in `services/workflow/state_machine.json` is not deployed (the
 
 ---
 
+### X-factor upgrades (agreed Oct 10, 16:10). Run after M3 in this order: X2 → X3 → X1 → X4
+
+These replace U4 (S3 Object Lock is **dropped**; keep only the receipt QR code). Each must run on AWS on camera, or it stays out of the video.
+
+| # | X-factor | Build | Rules | Time-box |
+|---|---|---|---|---|
+| **X2** | **Indoors isn't automatically safe.** Plan B puts the indoor session in the least-polluted free room. | Venue table `data/demo/venues.json`: `{venue_id, ventilation: sealed\|purifier\|normal\|open, capacity}`. Modelled indoor PM2.5 = outdoor × `infiltration[ventilation]`. The planner picks the lowest-exposure free venue (no venue clash) and returns `venue_choice: {chosen, alternatives[], indoor_pm25_modelled}`. | Infiltration factors live in the ruleset or config, not in code. Every response labels them `"basis": "assumption"` with the factor used. | 2 h |
+| **X3** | **Sensitive children first.** Classes with children who have respiratory conditions get stricter limits and first claim on clean slots and rooms. | `data/demo/class_profiles.json`: `{class, sensitive_count}` (**counts only, never names or IDs**). `advisory_at` and `restricted_at` are scaled down for those classes; the planner processes them first. The explanation shows "stricter threshold applied: N sensitive students". | Counts only. The CSV/profile loader rejects any name-like column. | 1 h |
+| **X1** | **Just forward the circular.** The principal forwards a circular PDF or photo to a Telegram bot, Bedrock extracts rules, code validates them, and the bot replies with the plan and Approve buttons. | Telegram webhook → S3 → extractor (M4) → validator → diff → reply. Fallback: `POST /circulars` (upload) with **cached, labelled** model output. | **Only if the Bedrock spike passes.** If Telegram plus Bedrock isn't working end to end within 3 h, switch to `POST /circulars` with cached labelled output. Stop there. | 3 h hard |
+| **X4** | **Live clean-air window.** | Same as U1: Open-Meteo hourly PM2.5, with an automatic labelled fallback to replay. | Replay is always labelled `is_replay=true`, plus an audit event. | 2.5 h |
+
+**Hard freeze: deadline minus 4 h.** No new features after that, only the demo script, seed data, fallbacks, README and recording.
+
 ## 4. Cut list (stop work, remove from video and README)
+
+- **S3 Object Lock anchoring (U4/X5).** Dropped by decision on Oct 10. The receipt QR code stays.
 
 - **`services/drills/tenant_scale_sim.py` and every "1,000 schools / 400,000 children" claim.** The numbers are fabricated constants, and the spec's own rules forbid them.
 - **`services/drills/drills_simulator.py` drill 3 (SQS/DLQ/Telegram 5xx).** There's no SQS queue, DLQ, alarm or delivery Lambda in the template. Either build the queue for real (≈2 h, low judge value) or remove SQS/DLQ from the README architecture (lines 107–126) and the video. **Recommendation: remove it.** Notices are delivered as WhatsApp click-to-share links, and saying so honestly is fine.
