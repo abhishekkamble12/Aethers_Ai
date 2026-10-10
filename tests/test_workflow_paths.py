@@ -24,7 +24,8 @@ from services.workflow.trigger import execution_name, trigger_handler  # noqa: E
 
 DEFINITION = json.loads((Path(__file__).resolve().parent.parent /
                          "services/workflow/state_machine.json").read_text(encoding="utf-8"))
-RUN_INPUT = {"tenant_id": "TENANT#demo", "stage": "III", "date": "2026-10-12", "session": "MORN"}
+RUN_INPUT = {"tenant_id": "TENANT#demo", "stage": "III", "date": "2026-10-12", "session": "MORN",
+             "forecast_source": "replay"}
 DECISION_ID = "TENANT#demo#2026-10-12#MORN"
 
 

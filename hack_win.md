@@ -227,6 +227,18 @@ The state machine in `services/workflow/state_machine.json` is not deployed (the
 > - **Privacy:** per-class counts appear only in admin responses (the plan behind `GET /decisions`). Public `/rehearse` redacts them, and the public audit chain records only the policy and how many classes got stricter limits.
 > - **Evidence:** `tests/test_sensitive_first.py` 9/9; full suite 140/140.
 
+> **X4 status: DONE (deployed and verified on AWS).**
+> - **Source:** `services/forecast/ingest.py` fetches Open-Meteo hourly PM2.5 (CAMS) for `data/demo/school.json`, averages it over each period's minutes, computes pessimistic as nominal × 1.2, and caches it in DynamoDB for 6 h.
+> - **Fallback:** on any API error, timeout, missing hour, or date beyond the ~5-day horizon, it falls back automatically to the replay forecast, labelled `is_replay` with a `fallback_reason`, and writes a `FORECAST_FALLBACK_REPLAY` audit row.
+> - **Defaults:** deployed runs use `live`; local runs and tests use `replay` (no network in tests). Every plan has a `forecast` summary ("live forecast" or "REPLAY SCENARIO …").
+> - **On AWS:**
+>   - **(A) live, 12 Oct, Stage II:** real values P1 66.7 … P8 50.3 → `confirmed_no_change` (honest: October air is under every limit).
+>   - **(B) 30 Nov, Stage III:** fallback row written, then principal timeout → `EscalateToVicePrincipal` → `FailSafeTimeout` (first real escalation run).
+>   - **(C) 7 Dec, Stage III, rejected:** fallback reason "HTTP 400: Parameter 'start_date' is out of allowed range…", `FailSafeRejected`, decision status `REJECTED_NO_BROADCAST`; chain of 17 rows verifies.
+> - **The live runs exposed two gaps, both fixed:** HTTP error bodies were discarded (the reason read "Bad Request"), and the terminal audit step didn't close the decision (the Brief showed a stale "awaiting"). Terminal events now set `APPROVED_AND_NOTIFIED` / `CLOSED_NO_CHANGE` / `REJECTED_NO_BROADCAST` / `FAILSAFE_TIMEOUT` / `WORKFLOW_ERROR`.
+> - **Evidence:** `tests/test_forecast.py` 12/12, plus a final-status test; full suite 153/153.
+> - **Demo implication:** a real bad-air day needs the labelled replay (`forecast_source: replay`). Live data is the "real data" proof shot.
+
 These replace U4 (S3 Object Lock is **dropped**; keep only the receipt QR code). Each must run on AWS on camera, or it stays out of the video.
 
 | # | X-factor | Build | Rules | Time-box |

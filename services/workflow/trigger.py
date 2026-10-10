@@ -42,7 +42,7 @@ def trigger_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         raise ValueError("rerun_label must match [a-z0-9]{1,12}")
 
     name = execution_name(run["decision_id"], rerun_label)
-    execution_input = {k: run[k] for k in ("tenant_id", "stage", "date", "session")}
+    execution_input = {k: run[k] for k in ("tenant_id", "stage", "date", "session", "forecast_source")}
     state_machine_arn = os.environ["STATE_MACHINE_ARN"]
     sfn = _sfn()
 

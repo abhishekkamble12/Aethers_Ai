@@ -21,6 +21,8 @@ Globals:
         TABLE_NAME: !Ref SaansTable
         APP_REGION: !Ref "AWS::Region"
         DELHI_STAGE_DEFAULT: "III"
+        # Deployed runs use the Open-Meteo forecast; replay only when asked or as the labelled fallback
+        DEFAULT_FORECAST_SOURCE: "live"
         # Must equal TimeoutSeconds of the approval states in services/workflow/state_machine.json
         APPROVAL_TIMEOUT_SECONDS: "60"
   Api:

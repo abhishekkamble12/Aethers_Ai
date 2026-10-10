@@ -49,7 +49,7 @@ class TestReceipts(wiring.TestAuditWiring):
         body = self.receipt()
         self.assertRegex(self.receipt_id, r"^[A-Za-z0-9_-]{12}$")
         self.assertEqual(body["decisionId"], "TENANT#demo#2026-10-12#MORN")
-        self.assertEqual(body["decisionStatus"], "APPROVE_PLAN_B")
+        self.assertEqual(body["decisionStatus"], "APPROVED_AND_NOTIFIED")  # closed by the terminal audit step
         self.assertEqual([b["eventType"] for b in body["blocks"]],
                          ["PLAN_GENERATED", "APPROVAL_REQUESTED", "APPROVAL_RECEIVED", "NOTICES_DRAFTED",
                           "RUN_CLOSED_APPROVED_AND_NOTIFIED"])

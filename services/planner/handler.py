@@ -17,6 +17,7 @@ from services.planner.csv_loader import load_timetable_csv
 from services.audit.hash_chain import compute_payload_digest
 from services.audit.store import append_audit
 from services.circular.diff_engine import compute_ruleset_hash
+from services.forecast.ingest import SOURCES as FORECAST_SOURCES, get_forecast
 from services.common.http import ApiError, guarded, is_http_event, json_body, respond
 
 logger = logging.getLogger()
@@ -27,6 +28,9 @@ STAGE_ALIASES = {"1": "I", "2": "II", "3": "III", "4": "IV"}
 SESSIONS = ("EVE", "MORN")
 TENANT_ID_RE = re.compile(r"^TENANT#[a-z0-9_-]{1,40}$")
 IST = timezone(timedelta(hours=5, minutes=30))
+# Deployed functions default to the live forecast (template sets DEFAULT_FORECAST_SOURCE=live);
+# local runs and tests default to the labelled replay so they never depend on the network.
+DEFAULT_FORECAST_SOURCE = os.environ.get("DEFAULT_FORECAST_SOURCE", "replay")
 
 TABLE_NAME = os.environ.get("TABLE_NAME", "SaansStateTable")
 
@@ -113,7 +117,11 @@ def parse_run_input(event: Dict[str, Any]) -> Dict[str, str]:
     session = event.get("session", "MORN")
     if session not in SESSIONS:
         raise ValueError(f"session must be EVE or MORN, got {session!r}")
+    forecast_source = event.get("forecast_source") or DEFAULT_FORECAST_SOURCE
+    if forecast_source not in FORECAST_SOURCES:
+        raise ValueError(f"forecast_source must be one of {FORECAST_SOURCES}, got {forecast_source!r}")
     return {
+        "forecast_source": forecast_source,
         "tenant_id": tenant_id,
         "stage": normalise_stage(event.get("stage", "III")),
         "date": date_str,
@@ -124,7 +132,16 @@ def parse_run_input(event: Dict[str, Any]) -> Dict[str, str]:
 
 def run_planner(run: Dict[str, str], execution: str = "") -> Dict[str, Any]:
     """Plans one decision, persists it and its audit row when running in AWS, returns {decision, audit_head}."""
-    timetable_records, forecast_data, ruleset_data = _get_demo_fixtures()
+    timetable_records, _, ruleset_data = _get_demo_fixtures()
+    in_aws = bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+    table = boto3.resource("dynamodb").Table(TABLE_NAME) if in_aws else None
+
+    forecast_data = get_forecast(run["date"], timetable_records, run["forecast_source"], table=table)
+    if in_aws and forecast_data.get("fallback_reason"):
+        append_audit(table, run["tenant_id"], "scheduler:forecast", "FORECAST_FALLBACK_REPLAY",
+                     {"decision_id": run["decision_id"], "requested_source": "live",
+                      "reason": forecast_data["fallback_reason"]},
+                     idempotency_key=f"{execution}#FORECAST_FALLBACK_REPLAY" if execution else None)
 
     plan_result = plan_schedule(
         timetable=timetable_records,
@@ -137,13 +154,17 @@ def run_planner(run: Dict[str, str], execution: str = "") -> Dict[str, Any]:
         **_get_school_config()
     )
 
+    # Which forecast values the decision used, and where they came from.
+    plan_result["forecast"] = forecast_summary(forecast_data)
+
     # What the decision was based on, so the audit row alone explains it.
     audit_payload = {
         "decision_id": run["decision_id"],
         "declared_stage": run["stage"],
         "ruleset_version": ruleset_data.get("ruleset_version"),
         "ruleset_sha256": compute_ruleset_hash(ruleset_data),
-        "forecast": {k: forecast_data.get(k) for k in ("grid_cell", "date", "generated_at", "model", "is_replay")},
+        "forecast": {k: forecast_data.get(k) for k in ("grid_cell", "date", "generated_at", "model", "is_replay",
+                                                        "requested_source", "fallback_reason", "source_url")},
         "timetable_sha256": compute_payload_digest(timetable_records),
         "plan_sha256": compute_payload_digest(plan_result),
         "swaps_count": len(plan_result["plan_a"]),
@@ -158,9 +179,8 @@ def run_planner(run: Dict[str, str], execution: str = "") -> Dict[str, Any]:
     }
 
     audit_row, receipt_id = None, None
-    if os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+    if in_aws:
         # Fail loudly: a workflow must never wait for approval of a decision that was not stored.
-        table = boto3.resource("dynamodb").Table(TABLE_NAME)
         # Public, opaque receipt ID for this decision (printable as a QR on notices).
         receipt_id = secrets.token_urlsafe(9)
         table.put_item(Item={"PK": f"RECEIPT#{receipt_id}", "SK": "META", "tenant_id": run["tenant_id"],
@@ -187,6 +207,16 @@ def run_planner(run: Dict[str, str], execution: str = "") -> Dict[str, Any]:
 
     # audit_head / receipt_id are None for local runs: nothing was persisted, so there is no chain to point at.
     return {"decision": plan_result, "audit_head": audit_row, "receipt_id": receipt_id}
+
+
+def forecast_summary(fc: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "model": fc.get("model"), "is_replay": bool(fc.get("is_replay")),
+        "label": "REPLAY SCENARIO (recorded data, not today's forecast)" if fc.get("is_replay") else "live forecast",
+        "requested_source": fc.get("requested_source"), "fallback_reason": fc.get("fallback_reason"),
+        "generated_at": fc.get("generated_at"), "grid_cell": fc.get("grid_cell"),
+        "periods": [{k: p.get(k) for k in ("period", "pm25_nominal", "pm25_pessimistic")} for p in fc.get("periods", [])],
+    }
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -217,13 +247,20 @@ def rehearse_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Runs instant what-if plan for requested stage (I-IV or 1-4) with zero DB mutations.
     """
     params = event.get("queryStringParameters") or {}
-    raw_stage = json_body(event).get("stage", params.get("stage", "III"))
+    body = json_body(event)
+    raw_stage = body.get("stage", params.get("stage", "III"))
     try:
         stage = normalise_stage(raw_stage)
     except ValueError as e:
         raise ApiError(400, "invalid_stage", str(e))
+    # Rehearsal defaults to the labelled bad-air replay; {"forecast_source": "live"} rehearses tomorrow's real forecast.
+    source = body.get("forecast_source", "replay")
+    if source not in FORECAST_SOURCES:
+        raise ApiError(400, "invalid_forecast_source", f"forecast_source must be one of {FORECAST_SOURCES}.")
 
-    timetable_records, forecast_data, ruleset_data = _get_demo_fixtures()
+    timetable_records, _, ruleset_data = _get_demo_fixtures()
+    tomorrow = (datetime.now(IST).date() + timedelta(days=1)).isoformat()
+    forecast_data = get_forecast(tomorrow, timetable_records, source)
 
     plan_result = plan_schedule(
         timetable=timetable_records,
@@ -235,4 +272,5 @@ def rehearse_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         **_get_school_config()
     )
     plan_result["declared_stage"] = stage
+    plan_result["forecast"] = forecast_summary(forecast_data)
     return respond(200, redact_sensitive_counts(plan_result))

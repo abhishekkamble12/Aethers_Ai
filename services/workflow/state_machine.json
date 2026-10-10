@@ -12,7 +12,8 @@
           "date.$": "$.date",
           "stage.$": "$.stage",
           "session.$": "$.session",
-          "execution.$": "$$.Execution.Name"
+          "execution.$": "$$.Execution.Name",
+          "forecast_source.$": "$.forecast_source"
         }
       },
       "ResultSelector": {

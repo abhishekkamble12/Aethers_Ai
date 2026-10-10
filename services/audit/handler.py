@@ -87,6 +87,10 @@ def verify_page_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
 WORKFLOW_EVENTS = ("RUN_CLOSED_NO_CHANGE", "RUN_CLOSED_APPROVED_AND_NOTIFIED", "REJECTED_NO_BROADCAST",
                    "FAILSAFE_TIMEOUT_NO_BROADCAST", "WORKFLOW_ERROR_NO_BROADCAST")
+# Final decision status shown in the Brief and on receipts once the workflow ends.
+FINAL_STATUS = {"RUN_CLOSED_NO_CHANGE": "CLOSED_NO_CHANGE", "RUN_CLOSED_APPROVED_AND_NOTIFIED": "APPROVED_AND_NOTIFIED",
+                "REJECTED_NO_BROADCAST": "REJECTED_NO_BROADCAST", "FAILSAFE_TIMEOUT_NO_BROADCAST": "FAILSAFE_TIMEOUT",
+                "WORKFLOW_ERROR_NO_BROADCAST": "WORKFLOW_ERROR"}
 
 
 def audit_event_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -109,4 +113,16 @@ def audit_event_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     table = boto3.resource("dynamodb").Table(os.environ["TABLE_NAME"])
     row = append_audit(table, tenant_id, "workflow", name, payload,
                        idempotency_key=f"{event['execution']}#{name}" if event.get("execution") else None)
+    if event.get("decision_id"):
+        from botocore.exceptions import ClientError
+        from services.workflow.decision_store import decision_key
+        try:  # close the decision so the Brief never shows a stale "awaiting" state
+            table.update_item(Key=decision_key(event["decision_id"]),
+                              UpdateExpression="SET #s = :s, closed_at = :t, final_audit_seq = :q REMOVE approval_pending",
+                              ConditionExpression="attribute_exists(PK)",
+                              ExpressionAttributeNames={"#s": "status"},
+                              ExpressionAttributeValues={":s": FINAL_STATUS[name], ":t": row["ts"], ":q": row["seq"]})
+        except ClientError as e:
+            if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+                raise
     return {"event": name, "seq": row["seq"], "hash": row["hash"], "persisted": True}

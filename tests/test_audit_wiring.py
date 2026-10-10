@@ -139,6 +139,18 @@ class TestAuditWiring(unittest.TestCase):
         self.assertEqual(out["seq"], before)
         self.assertEqual(len(read_chain(self.table, TENANT)), before)
 
+    def test_final_status_is_written_to_the_decision(self):
+        cases = (("APPROVE_PLAN_B", "APPROVE_PLAN_B", "APPROVED_AND_NOTIFIED"), (None, None, "FAILSAFE_TIMEOUT"),
+                 ("REJECT", None, "REJECTED_NO_BROADCAST"))
+        for principal, vp, expected in cases:
+            with self.subTest(expected=expected):
+                for item in self.table.scan()["Items"]:
+                    self.table.delete_item(Key={"PK": item["PK"], "SK": item["SK"]})
+                self.run_workflow(principal, vp)
+                dec = self.table.get_item(Key={"PK": TENANT, "SK": "DEC#2026-10-12#MORN"})["Item"]
+                self.assertEqual(dec["status"], expected)
+                self.assertNotIn("approval_pending", dec)
+
     def test_unknown_audit_event_rejected(self):
         with self.assertRaises(ValueError):
             audit_event_handler({"tenant_id": TENANT, "event": "APPROVED_BY_HACKER"}, None)
