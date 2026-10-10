@@ -114,7 +114,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: services.audit.handler.receipt_handler
-      Description: Returns privacy-filtered audit trail for in-browser cryptographic verification
+      Description: GET /receipts/{id} - tenant hash chain from DynamoDB for in-browser verification
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref SaansTable
@@ -123,6 +123,20 @@ Resources:
           Type: Api
           Properties:
             Path: /receipts/{id}
+            Method: get
+
+  # 5b. Public browser verifier page (fetches /receipts/{id} and recomputes hashes client-side)
+  VerifyPageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services.audit.handler.verify_page_handler
+      Description: GET /verify/{id} - self-contained receipt verification page
+      MemorySize: 128
+      Events:
+        VerifyPageApi:
+          Type: Api
+          Properties:
+            Path: /verify/{id}
             Method: get
 
   # 6. Bilingual Notification & WhatsApp Dispatch Function

@@ -192,9 +192,15 @@ class TestPlannerAndWorkflowContract(unittest.TestCase):
 
     def test_step_functions_invocation_returns_plain_decision(self):
         out = planner_handler.lambda_handler({"tenant_id": TENANT, "stage": "3", "date": "2026-10-12"}, None)
-        self.assertEqual(set(out), {"decision", "audit_head"})  # what ResultSelector $.Payload.decision reads
+        self.assertEqual(set(out), {"decision", "audit_head", "receipt_id"})  # what LoadContext's ResultSelector reads
         self.assertEqual(out["decision"]["decision_id"], DECISION_ID)
         self.assertEqual(out["decision"]["declared_stage"], "III")
+
+    def test_load_context_selects_only_fields_the_planner_returns(self):
+        sm = json.loads((ROOT / "services/workflow/state_machine.json").read_text(encoding="utf-8"))
+        selected = {v.split(".", 2)[2] for v in sm["States"]["LoadContext"]["ResultSelector"].values()}
+        out = planner_handler.lambda_handler({"tenant_id": TENANT, "stage": "III", "date": "2026-10-12"}, None)
+        self.assertTrue(selected <= set(out), f"ResultSelector reads {selected - set(out)} the planner does not return")
 
     def test_step_functions_invalid_input_fails_execution(self):
         for bad in ({"stage": "V"}, {"date": "tomorrow"}, {"tenant_id": "demo"}, {"session": "NOON"}):

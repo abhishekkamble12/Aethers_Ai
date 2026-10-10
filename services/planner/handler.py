@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import secrets
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, Any
 
@@ -108,10 +109,16 @@ def run_planner(run: Dict[str, str], execution: str = "") -> Dict[str, Any]:
         "pe_minutes_preserved": plan_result["pe_minutes_preserved"]
     }
 
-    audit_row = None
+    audit_row, receipt_id = None, None
     if os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
         # Fail loudly: a workflow must never wait for approval of a decision that was not stored.
         table = boto3.resource("dynamodb").Table(TABLE_NAME)
+        # Public, opaque receipt ID for this decision (printable as a QR on notices).
+        receipt_id = secrets.token_urlsafe(9)
+        table.put_item(Item={"PK": f"RECEIPT#{receipt_id}", "SK": "META", "tenant_id": run["tenant_id"],
+                             "decision_id": run["decision_id"]},
+                       ConditionExpression="attribute_not_exists(PK)")
+        audit_payload["receipt_id"] = receipt_id  # plan_sha256 above covers plan_result unchanged
         audit_row = append_audit(
             table, run["tenant_id"], "scheduler:planner", "PLAN_GENERATED", audit_payload,
             idempotency_key=f"{execution}#PLAN_GENERATED" if execution else None)
@@ -124,13 +131,14 @@ def run_planner(run: Dict[str, str], execution: str = "") -> Dict[str, Any]:
                 "status": "PLANNED",
                 "declared_stage": run["stage"],
                 "data": json.dumps(plan_result),
+                "receipt_id": receipt_id,
                 "audit_seq": audit_row["seq"],
                 "audit_hash": audit_row["hash"]
             }
         )
 
-    # audit_head is None for local runs: nothing was persisted, so there is no chain to point at.
-    return {"decision": plan_result, "audit_head": audit_row}
+    # audit_head / receipt_id are None for local runs: nothing was persisted, so there is no chain to point at.
+    return {"decision": plan_result, "audit_head": audit_row, "receipt_id": receipt_id}
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:

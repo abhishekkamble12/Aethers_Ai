@@ -47,21 +47,12 @@ class TestSecurityAndIsolation(unittest.TestCase):
         self.assertEqual(resp["statusCode"], 400)
         self.assertEqual(json.loads(resp["body"])["error"]["code"], "invalid_action")
 
-    def test_receipt_pii_data_minimization(self):
-        """Public receipt endpoint contains only tamper-evident hashes, zero personal identifiable info."""
-        event = {"pathParameters": {"id": "DPS#2026-10-12#MORN"}}
-        resp = receipt_handler(event, None)
-        self.assertEqual(resp["statusCode"], 200)
-        body = json.loads(resp["body"])
-
-        # Check absence of PII
-        for forbidden_key in ["student_name", "teacher_phone", "roll_number", "parent_email"]:
-            self.assertNotIn(forbidden_key, body)
-
-        # Check presence of verification fields
-        self.assertIn("receipt_id", body)
-        self.assertIn("algorithm", body)
-        self.assertEqual(body["algorithm"], "SHA-256")
+    def test_receipt_rejects_guessable_decision_ids(self):
+        """Receipts are looked up by an opaque random ID, never by tenant#date (which is guessable).
+        Content minimisation of real receipts is covered in tests/test_receipts.py."""
+        resp = receipt_handler({"httpMethod": "GET", "pathParameters": {"id": "DPS#2026-10-12#MORN"}}, None)
+        self.assertEqual(resp["statusCode"], 400)
+        self.assertEqual(json.loads(resp["body"])["error"]["code"], "invalid_receipt_id")
 
     def test_audit_row_structure_append_only(self):
         """Audit log rows enforce immutable sequential ordering and deterministic canonical representation."""

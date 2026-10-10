@@ -17,7 +17,8 @@
       },
       "ResultSelector": {
         "decision.$": "$.Payload.decision",
-        "audit_head.$": "$.Payload.audit_head"
+        "audit_head.$": "$.Payload.audit_head",
+        "receipt_id.$": "$.Payload.receipt_id"
       },
       "ResultPath": "$.planner_output",
       "Retry": [

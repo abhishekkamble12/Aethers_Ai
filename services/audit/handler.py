@@ -1,71 +1,89 @@
 """
-Lambda handler for Public Receipt Verification
-Returns actual audit chain rows for client-side cryptographic verification.
+Audit Lambda handlers
+- GET /receipts/{id}: public, privacy-filtered receipt built from the tenant's real hash chain
+- GET /verify/{id}:   self-contained page that fetches the receipt and recomputes every hash in the browser
+- audit_event_handler: terminal Step Functions states append to the chain
 """
 
 import json
-from typing import Dict, Any, List
-from services.audit.hash_chain import verify_audit_chain
+import os
+import re
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, Any
 
-# Demo chain data matching app.js (for demo purposes)
-# In production, this would query DynamoDB for PK=TENANT#{tenant_id}, SK begins_with AUD#
-DEMO_CHAIN = [
-  {
-    "seq": 1,
-    "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
-    "actor_role": "scheduler:eventbridge",
-    "event": "STAGE_III_FORECAST_INGESTED",
-    "payload_digest": "dea600875056e79ef3367e0283d95a1158f31be16e0b75b4ced781cb577f8369",
-    "ts": "2026-10-12T05:30:00Z",
-    "hash": "570219d0482ccdbf2d3b414dbb4926d00de2d9310f0e76abba6e17933018b842"
-  },
-  {
-    "seq": 2,
-    "prev_hash": "570219d0482ccdbf2d3b414dbb4926d00de2d9310f0e76abba6e17933018b842",
-    "actor_role": "rules_engine",
-    "event": "RULES_EVALUATED_RULESET_R1",
-    "payload_digest": "94c7603a84d2399342420e2cf2e9a2b0e6d6e85b14542f6060fb44283284ba20",
-    "ts": "2026-10-12T05:30:02Z",
-    "hash": "22520f13d5bd5b368608d6e859209f833f654fb5731f2667614b37ada745f7aa"
-  },
-  {
-    "seq": 3,
-    "prev_hash": "22520f13d5bd5b368608d6e859209f833f654fb5731f2667614b37ada745f7aa",
-    "actor_role": "planner:deterministic",
-    "event": "PLAN_A_B_GENERATED",
-    "payload_digest": "b3e9b3d0c9d058d74c09dca080314699bc5afe2ccc83166b2ed5aedbce60e60d",
-    "ts": "2026-10-12T05:30:05Z",
-    "hash": "a094dc8e6cc32627c44d8cdca7041e2ab30031cacd868a29012d5c66de8b807b"
-  }
-]
+import boto3
 
+from services.audit.hash_chain import GENESIS_HASH, verify_audit_chain
+from services.audit.store import read_chain
+from services.common.http import ApiError, guarded, respond
+
+RECEIPT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,32}$")
+HASHING_SPEC = ("hash_n = SHA-256(hash_{n-1} + JSON({actor, eventType, payloadDigest, sequence, timestamp}) "
+                "with keys sorted and no whitespace); hash_0 = 64 zeros; payloadDigest = SHA-256(payloadJson)")
+VERIFY_PAGE = Path(__file__).with_name("verify_page.html")
+
+
+def _table():
+    return boto3.resource("dynamodb").Table(os.environ["TABLE_NAME"])
+
+
+def _receipt_id(event: Dict[str, Any]) -> str:
+    receipt_id = (event.get("pathParameters") or {}).get("id", "")
+    if not RECEIPT_ID_RE.match(receipt_id):
+        raise ApiError(400, "invalid_receipt_id", "Receipt ID is malformed.")
+    return receipt_id
+
+
+@guarded
 def receipt_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Returns public receipt with audit chain rows for client-side cryptographic verification.
+    The whole tenant chain is returned because verification must start at genesis. Rows contain
+    roles, event names, digests, timestamps and payloads (counts, versions, hashes): no personal
+    data, approval links or task tokens (enforced by tests/test_audit_wiring.py).
     """
-    path_parameters = event.get("pathParameters") or {}
-    receipt_id = path_parameters.get("id", "latest")
+    receipt_id = _receipt_id(event)
+    table = _table()
+    ref = table.get_item(Key={"PK": f"RECEIPT#{receipt_id}", "SK": "META"}).get("Item")
+    if not ref:
+        raise ApiError(404, "receipt_not_found", "No receipt with that ID.")
 
-    # Verify chain integrity
-    is_valid, message, _ = verify_audit_chain(DEMO_CHAIN)
-    
-    return {
-        "statusCode": 200,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-        },
-        "body": json.dumps({
-            "receipt_id": receipt_id,
-            "status": "valid" if is_valid else "invalid",
-            "algorithm": "SHA-256",
-            "message": message,
-            "chain": DEMO_CHAIN,
-            "head_hash": DEMO_CHAIN[-1]["hash"] if DEMO_CHAIN else None
-        })
-    }
+    rows = read_chain(table, ref["tenant_id"])
+    ok, message, broken = verify_audit_chain(rows)
+    decision = table.get_item(Key={"PK": ref["tenant_id"],
+                                   "SK": "DEC#" + ref["decision_id"].split("#", 2)[2]}).get("Item") or {}
+    blocks = [{
+        "sequence": r["seq"], "hash": r["hash"], "previousHash": r["prev_hash"], "actor": r["actor_role"],
+        "eventType": r["event"], "payloadDigest": r["payload_digest"], "timestamp": r["ts"],
+        "payloadJson": r.get("payload_json"),
+        "decisionId": (r.get("payload") or {}).get("decision_id"),
+    } for r in rows]
+
+    return respond(200, {
+        "receiptId": receipt_id,
+        "schoolId": ref["tenant_id"].split("#", 1)[1],
+        "decisionId": ref["decision_id"],
+        "decisionStatus": decision.get("status"),
+        "decisionSequences": [b["sequence"] for b in blocks if b["decisionId"] == ref["decision_id"]],
+        "genesisHash": GENESIS_HASH,
+        "auditHead": blocks[-1]["hash"] if blocks else GENESIS_HASH,
+        "blocks": blocks,
+        "hashing": HASHING_SPEC,
+        "serverVerification": {"valid": ok, "message": message,
+                               "brokenSequence": blocks[broken]["sequence"] if broken >= 0 else None},
+        "verifiedAt": datetime.now(timezone.utc).isoformat(),
+    })
 
 
+@guarded
+def verify_page_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """Serves the browser verifier; it fetches ../receipts/{id} from the same API and checks every hash itself."""
+    _receipt_id(event)
+    return {"statusCode": 200,
+            "headers": {"Content-Type": "text/html; charset=utf-8",
+                        "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; "
+                                                   "style-src 'unsafe-inline'; connect-src 'self'"},
+            "body": VERIFY_PAGE.read_text(encoding="utf-8")}
 
 WORKFLOW_EVENTS = ("RUN_CLOSED_NO_CHANGE", "RUN_CLOSED_APPROVED_AND_NOTIFIED", "REJECTED_NO_BROADCAST",
                    "FAILSAFE_TIMEOUT_NO_BROADCAST", "WORKFLOW_ERROR_NO_BROADCAST")

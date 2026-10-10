@@ -150,7 +150,7 @@ def runner(status="pending_approval", **overrides):
     behaviours = {
         "LoadContext": lambda p: {"decision": {"decision_id": DECISION_ID, "status": status,
                                                "declared_stage": p["stage"], "plan_b": []},
-                                  "audit_head": {"seq": 1}},
+                                  "audit_head": {"seq": 1}, "receipt_id": "Rcpt12345678"},
         "RequestPrincipalApproval": answer("APPROVE_PLAN_A", "principal"),
         "EscalateToVicePrincipal": answer("APPROVE_PLAN_B", "vice_principal"),
         "DraftAndDispatchNotices": lambda p: {"statusCode": 200},

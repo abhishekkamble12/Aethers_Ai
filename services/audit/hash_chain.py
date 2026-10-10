@@ -1,7 +1,11 @@
 """
 Hash-Chained Audit Log Module
 Implements tamper-evident audit trail:
-hash_n = SHA256( hash_{n-1} || canonical_json(row_n) )
+hash_n = SHA256( hash_{n-1} || canonical_json(hash_body(row_n)) )
+
+hash_body uses the field names of the browser verifier (lib/crypto.ts verifyAuditChain and the
+backend-served /verify page): {"actor","eventType","payloadDigest","sequence","timestamp"},
+keys sorted, compact separators, ASCII-only values, so JS JSON.stringify reproduces it exactly.
 """
 
 import hashlib
@@ -30,6 +34,11 @@ def compute_row_hash(prev_hash: str, row_body: Dict[str, Any]) -> str:
     content = prev_hash + canonical_json(row_body)
     return hashlib.sha256(content.encode('utf-8')).hexdigest()
 
+def hash_body(seq: int, actor_role: str, event: str, payload_digest: str, ts: str) -> Dict[str, Any]:
+    """The exact object whose canonical JSON is hashed for each row (shared with the browser verifiers)."""
+    return {"sequence": seq, "actor": actor_role, "eventType": event, "payloadDigest": payload_digest,
+            "timestamp": ts}
+
 def create_audit_row(
     seq: int,
     prev_hash: str,
@@ -44,15 +53,7 @@ def create_audit_row(
     ts = timestamp or datetime.now(timezone.utc).isoformat()
     payload_digest = compute_payload_digest(payload)
     
-    row_body = {
-        "seq": seq,
-        "actor_role": actor_role,
-        "event": event,
-        "payload_digest": payload_digest,
-        "ts": ts
-    }
-    
-    row_hash = compute_row_hash(prev_hash, row_body)
+    row_hash = compute_row_hash(prev_hash, hash_body(seq, actor_role, event, payload_digest, ts))
     
     return {
         "seq": seq,
@@ -88,14 +89,8 @@ def verify_audit_chain(rows: List[Dict[str, Any]]) -> Tuple[bool, str, int]:
             return False, f"Broken prev_hash link at seq {seq}: expected {current_expected_prev}, got {prev_hash}", idx
 
         # 3. Hash recomputation check
-        row_body = {
-            "seq": row.get("seq"),
-            "actor_role": row.get("actor_role"),
-            "event": row.get("event"),
-            "payload_digest": row.get("payload_digest"),
-            "ts": row.get("ts")
-        }
-        recomputed = compute_row_hash(prev_hash, row_body)
+        recomputed = compute_row_hash(prev_hash, hash_body(row.get("seq"), row.get("actor_role"), row.get("event"),
+                                                           row.get("payload_digest"), row.get("ts")))
         if recomputed != row_hash:
             return False, f"Tampered record at seq {seq}! Recomputed hash {recomputed} does not match {row_hash}", idx
 

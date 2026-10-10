@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saans Receipt Check</title>
+<style>
+  :root { --bg:#f7f7f5; --fg:#1d1d1b; --muted:#6b6b66; --card:#ffffff; --line:#e3e3de;
+          --ok:#1f7a4d; --ok-bg:#e6f4ec; --bad:#b42318; --bad-bg:#fdecea; --mark:#fff6d6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#151514; --fg:#ededea; --muted:#a3a39c; --card:#1f1f1d; --line:#33332f;
+            --ok:#5cc38f; --ok-bg:#163325; --bad:#ff8a7f; --bad-bg:#3a1714; --mark:#3a3317; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width:860px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .muted { color:var(--muted); font-size:13px; }
+  .verdict { margin:20px 0; padding:16px; border-radius:10px; font-weight:600; font-size:17px; }
+  .verdict.ok { background:var(--ok-bg); color:var(--ok); }
+  .verdict.bad { background:var(--bad-bg); color:var(--bad); }
+  .meta { display:grid; grid-template-columns:max-content 1fr; gap:4px 12px; font-size:13px; margin-bottom:16px; }
+  .mono { font-family:ui-monospace, SFMono-Regular, Consolas, monospace; font-size:12px; overflow-wrap:anywhere; }
+  ol { list-style:none; padding:0; margin:0; }
+  li { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--ok); border-radius:8px;
+       padding:10px 12px; margin-bottom:8px; }
+  li.bad { border-left-color:var(--bad); }
+  li.mine { background:var(--mark); }
+  .row-head { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; font-weight:600; }
+  .why { color:var(--bad); font-size:13px; margin-top:4px; }
+  details { margin-top:6px; font-size:13px; }
+  button { font:inherit; padding:8px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 16px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Saans decision receipt</h1>
+  <p class="muted">Your browser downloads the school's audit log and recomputes every SHA-256 hash itself. It does not trust the server's answer.</p>
+  <div id="verdict" class="verdict" role="status">Checking…</div>
+  <div class="meta" id="meta"></div>
+  <div class="bar">
+    <button id="tamper" type="button">Simulate tampering (local copy only)</button>
+    <button id="reset" type="button" hidden>Re-check original</button>
+  </div>
+  <ol id="rows"></ol>
+  <p class="muted" id="spec"></p>
+</main>
+<script>
+(async () => {
+  const $ = (id) => document.getElementById(id);
+  const id = decodeURIComponent(location.pathname.split("/").filter(Boolean).pop() || "");
+  const enc = new TextEncoder();
+  const hex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const sha256 = async (s) => hex(await crypto.subtle.digest("SHA-256", enc.encode(s)));
+
+  function setVerdict(ok, text) { const v = $("verdict"); v.className = "verdict " + (ok ? "ok" : "bad"); v.textContent = text; }
+
+  if (!window.crypto || !crypto.subtle) { setVerdict(false, "This browser cannot compute SHA-256 here (needs HTTPS). Nothing was verified."); return; }
+
+  let receipt;
+  try {
+    const res = await fetch("../receipts/" + encodeURIComponent(id), { headers: { Accept: "application/json" } });
+    receipt = await res.json();
+    if (!res.ok) throw new Error((receipt.error && receipt.error.message) || res.statusText);
+  } catch (e) { setVerdict(false, "Could not load receipt: " + e.message); return; }
+
+  const original = JSON.parse(JSON.stringify(receipt.blocks));
+  const mine = new Set(receipt.decisionSequences);
+
+  async function verify(blocks) {
+    let prev = receipt.genesisHash, firstBad = null;
+    const results = [];
+    for (let i = 0; i < blocks.length; i++) {
+      const b = blocks[i], problems = [];
+      if (b.sequence !== i + 1) problems.push("sequence gap (expected " + (i + 1) + ")");
+      if (b.previousHash !== prev) problems.push("does not link to the previous row");
+      // Keys in sorted order; values are ASCII, so this matches the server's canonical JSON byte for byte.
+      const body = JSON.stringify({ actor: b.actor, eventType: b.eventType, payloadDigest: b.payloadDigest,
+                                    sequence: b.sequence, timestamp: b.timestamp });
+      if (await sha256(prev + body) !== b.hash) problems.push("row hash does not match its contents");
+      if (b.payloadJson != null && await sha256(b.payloadJson) !== b.payloadDigest) problems.push("payload was changed after it was recorded");
+      if (problems.length && firstBad === null) firstBad = b.sequence;
+      results.push(problems);
+      prev = b.hash;
+    }
+    return { firstBad, results };
+  }
+
+  function render(blocks, outcome) {
+    const list = $("rows"); list.replaceChildren();
+    blocks.forEach((b, i) => {
+      const li = document.createElement("li");
+      if (outcome.results[i].length) li.classList.add("bad");
+      if (mine.has(b.sequence)) li.classList.add("mine");
+      const head = document.createElement("div"); head.className = "row-head";
+      const left = document.createElement("span"); left.textContent = "#" + b.sequence + "  " + b.eventType;
+      const right = document.createElement("span"); right.className = "muted"; right.textContent = b.actor + " · " + b.timestamp;
+      head.append(left, right); li.append(head);
+      const h = document.createElement("div"); h.className = "mono"; h.textContent = "hash " + b.hash; li.append(h);
+      outcome.results[i].forEach((p) => { const w = document.createElement("div"); w.className = "why"; w.textContent = "✕ " + p; li.append(w); });
+      if (b.payloadJson) {
+        const d = document.createElement("details"); const s = document.createElement("summary"); s.textContent = "What was recorded";
+        const pre = document.createElement("pre"); pre.className = "mono"; pre.textContent = JSON.stringify(JSON.parse(b.payloadJson), null, 2);
+        d.append(s, pre); li.append(d);
+      }
+      list.append(li);
+    });
+    if (outcome.firstBad === null) setVerdict(true, "✓ Valid: all " + blocks.length + " records recomputed in your browser and the chain is unbroken.");
+    else setVerdict(false, "✕ Broken at record #" + outcome.firstBad + ": the log was changed after it was written.");
+  }
+
+  const meta = $("meta");
+  [["Receipt", receipt.receiptId], ["School", receipt.schoolId], ["Decision", receipt.decisionId],
+   ["Status", receipt.decisionStatus || "—"], ["Head hash", receipt.auditHead],
+   ["Rows for this decision", (receipt.decisionSequences || []).join(", ") || "—"]].forEach(([k, v]) => {
+    const a = document.createElement("span"); a.className = "muted"; a.textContent = k;
+    const b = document.createElement("span"); b.className = "mono"; b.textContent = v;
+    meta.append(a, b);
+  });
+  $("spec").textContent = "Method: " + receipt.hashing;
+
+  render(original, await verify(original));
+
+  $("tamper").addEventListener("click", async () => {
+    const copy = JSON.parse(JSON.stringify(original));
+    const target = copy.find((b) => mine.has(b.sequence) && b.eventType === "APPROVAL_RECEIVED") || copy[Math.floor(copy.length / 2)];
+    target.actor = target.actor === "principal" ? "vice_principal" : "principal";
+    render(copy, await verify(copy));
+    $("reset").hidden = false;
+  });
+  $("reset").addEventListener("click", async () => { render(original, await verify(original)); $("reset").hidden = true; });
+})();
+</script>
+</body>
+</html>

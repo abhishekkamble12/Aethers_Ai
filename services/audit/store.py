@@ -5,7 +5,7 @@ Persisted, hash-chained audit log in the single DynamoDB table.
     PK={tenant_id}  SK=AUDHEAD         seq, hash                     (head pointer)
     PK={tenant_id}  SK=AUDKEY#{key}    seq                           (idempotency marker, optional)
 
-hash_n = SHA256(hash_{n-1} || canonical_json({seq, actor_role, event, payload_digest, ts}))
+hash_n = SHA256(hash_{n-1} || canonical_json(hash_body(row)))   (see hash_chain.hash_body)
 payload_digest = SHA256(canonical_json(payload)); the payload itself is stored so anyone can
 re-check the digest. Payloads carry roles, counts and IDs, never personal data or approval links.
 
@@ -40,6 +40,7 @@ def _normalise(item: Dict[str, Any]) -> Dict[str, Any]:
     out = {k: item[k] for k in ROW_FIELDS if k in item}
     out["seq"] = int(out["seq"])
     if "payload" in item:
+        out["payload_json"] = item["payload"]  # exact canonical bytes that payload_digest covers
         out["payload"] = json.loads(item["payload"])
     return out
 

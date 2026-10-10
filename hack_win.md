@@ -93,7 +93,12 @@ The state machine in `services/workflow/state_machine.json` is not deployed (the
 > - **The verifier now also re-checks each stored payload against its digest.** Before, an edited payload passed verification.
 > - **Evidence:** `test_audit_store` 9/9 (a real 4-thread race with 7 retried conflicts gives a gapless chain of 20; editing a row is detected at its seq; editing a payload is detected; history can't be overwritten). `test_audit_wiring` 6/6 (real handlers driven through `state_machine.json` write a 5-row chain that verifies, short IDs and task tokens never enter it, and a retried audit doesn't double-log). Full suite 91/91; `sam build` OK.
 > - **Limitation to state honestly:** someone with write access who rewrites *every* row from some point onward, recomputing the hashes, isn't detectable from the chain alone. Publishing the head hash on each notice and receipt (the QR) is what pins it. Moto's `transact_write_items` isn't thread-safe, so the race test serialises each transaction to stand in for DynamoDB's atomicity.
-> - **M3b (next):** `GET /receipts/{id}` reads this chain (the hardcoded `DEMO_CHAIN` gets deleted), and `web/verify.html` points at it.
+> **M3b status: PARTIAL (code done and tested locally; not deployed).**
+> - **Receipts:** an opaque 12-character receipt ID is issued per decision at planning time. `GET /receipts/{id}` returns the tenant's real chain from DynamoDB in the frontend's `AuditBlock` shape, plus `payloadJson` (the exact bytes the digest covers), the rows for this decision, the head hash and the server's verdict. `DEMO_CHAIN` is deleted. Guessable `tenant#date` IDs are rejected (400), unknown IDs get 404.
+> - **New `GET /verify/{id}`:** a standalone page served by the API with a strict CSP. It recomputes every row hash and payload digest in the browser (no fake fallback without WebCrypto) and has a labelled "simulate tampering (local copy only)" button.
+> - **Hash input** now uses the browser verifier's field names (`actor, eventType, payloadDigest, sequence, timestamp`), so the existing frontend `lib/crypto.ts` verifies real rows unchanged.
+> - **Evidence:** `test_receipts` passes 7/7, including running the **unchanged** `lib/crypto.ts verifyAuditChain` and the page's own `<script>` under Node against a backend-written chain (valid; editing row 3 is detected at #3). There's a new contract test that LoadContext only selects fields the planner returns. Full suite 99/99; `sam build` OK; 34 resources.
+> - **Frontend status (not changed, it's your call):** the Next verification page still verifies the mock `auditChain` from the Zustand store, and `web/verify.html` uses an incompatible pipe-joined hash over an in-page array. The real demo uses `GET /verify/{id}`. Wiring the Next page needs a fetch of `${NEXT_PUBLIC_API_URL}/receipts/${id}` passing `blocks` to the existing `verifyAuditChain`, and removing its non-cryptographic fallback hash in `lib/crypto.ts`.
 - **Problem:** `planner/handler.py:423` always creates `seq=1, prev_hash=GENESIS` and `put_item`s `AUD#000001`, so every run overwrites it. `audit/handler.py:116` serves a hardcoded `DEMO_CHAIN`. The "Proves it" beat currently proves nothing.
 - **Fix:**
   1. Add `services/audit/store.py: append_audit(table, tenant_id, actor_role, event, payload)`:
@@ -190,6 +195,7 @@ These replace U4 (S3 Object Lock is **dropped**; keep only the receipt QR code).
 ## 4. Cut list (stop work, remove from video and README)
 
 - **S3 Object Lock anchoring (U4/X5).** Dropped by decision on Oct 10. The receipt QR code stays.
+- **`web/verify.html` and `web/app.js` (legacy static pages).** Their hashes can't match the backend (pipe-joined input, in-page fake chain). Don't show them; use `GET /verify/{id}`.
 
 - **`services/drills/tenant_scale_sim.py` and every "1,000 schools / 400,000 children" claim.** The numbers are fabricated constants, and the spec's own rules forbid them.
 - **`services/drills/drills_simulator.py` drill 3 (SQS/DLQ/Telegram 5xx).** There's no SQS queue, DLQ, alarm or delivery Lambda in the template. Either build the queue for real (≈2 h, low judge value) or remove SQS/DLQ from the README architecture (lines 107–126) and the video. **Recommendation: remove it.** Notices are delivered as WhatsApp click-to-share links, and saying so honestly is fine.

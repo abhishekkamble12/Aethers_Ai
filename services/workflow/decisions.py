@@ -68,6 +68,7 @@ def decisions_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         "decided_by_role": item.get("decided_by_role"),
         "decided_at": item.get("decided_at"),
         "plan": json.loads(item["data"]) if item.get("data") else None,
+        "receipt_id": item.get("receipt_id"),
         "approval": None,
     }
     pending = item.get("approval_pending")
