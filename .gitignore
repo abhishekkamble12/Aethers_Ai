@@ -218,3 +218,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Lambda bundle (scripts/build_lambda.py) and SAM build output
+infra/.lambda_src/
+.aws-sam/

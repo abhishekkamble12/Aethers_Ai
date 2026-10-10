@@ -4,6 +4,8 @@ Description: Saans - Air-Safety School Day Planner Infrastructure (Environmental
 
 Globals:
   Function:
+    # One bundle for every function, built by scripts/build_lambda.py (services/ + data/).
+    CodeUri: .lambda_src/
     Timeout: 30
     MemorySize: 512
     Runtime: python3.11
@@ -12,6 +14,11 @@ Globals:
         TABLE_NAME: !Ref SaansTable
         APP_REGION: !Ref "AWS::Region"
         DELHI_STAGE_DEFAULT: "III"
+  Api:
+    Cors:
+      AllowOrigin: "'*'"
+      AllowHeaders: "'Content-Type'"
+      AllowMethods: "'GET,POST,OPTIONS'"
 
 Resources:
   # 1. DynamoDB Single Table
@@ -50,8 +57,7 @@ Resources:
   IngestPlannerFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: handler.lambda_handler
-      CodeUri: ../services/planner/
+      Handler: services.planner.handler.lambda_handler
       Description: Scheduled or on-demand runner that classifies periods and generates Plan A/B
       Policies:
         - DynamoDBCrudPolicy:
@@ -69,8 +75,7 @@ Resources:
   RehearseFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: handler.rehearse_handler
-      CodeUri: ../services/planner/
+      Handler: services.planner.handler.rehearse_handler
       Description: Instant re-plan simulator for Stage I-IV rehearsal slider
       Events:
         RehearseApi:
@@ -83,8 +88,7 @@ Resources:
   ApprovalFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: handler.approval_handler
-      CodeUri: ../services/workflow/
+      Handler: services.workflow.handler.approval_handler
       Description: Handles principal approval/rejection callbacks
       Policies:
         - DynamoDBCrudPolicy:
@@ -100,8 +104,7 @@ Resources:
   ReceiptVerifyFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: handler.receipt_handler
-      CodeUri: ../services/audit/
+      Handler: services.audit.handler.receipt_handler
       Description: Returns privacy-filtered audit trail for in-browser cryptographic verification
       Policies:
         - DynamoDBReadPolicy:
@@ -117,8 +120,7 @@ Resources:
   NotificationFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: handler.notify_handler
-      CodeUri: ../services/notify/
+      Handler: services.notify.handler.notify_handler
       Description: Drafts bilingual safety notices with Bedrock/template fallback and WhatsApp link builder
       Policies:
         - DynamoDBCrudPolicy:
