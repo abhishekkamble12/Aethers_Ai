@@ -1,0 +1,11 @@
+{
+  "basis": "assumption",
+  "note": "Indoor PM2.5 is modelled as outdoor PM2.5 x an infiltration factor per ventilation type. These factors are configurable planning assumptions, not measurements; replace them with a school's own indoor readings when available.",
+  "default_ventilation": "normal",
+  "infiltration": {
+    "purifier": 0.3,
+    "sealed": 0.5,
+    "normal": 0.7,
+    "open": 0.95
+  }
+}

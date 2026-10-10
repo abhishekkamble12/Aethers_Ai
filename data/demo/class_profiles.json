@@ -1,0 +1,11 @@
+{
+  "note": "Class-level counts only. No names, roll numbers or any per-child data.",
+  "classes": [
+    {"class": "6A", "students": 38},
+    {"class": "7A", "students": 40},
+    {"class": "7B", "students": 39},
+    {"class": "8A", "students": 42},
+    {"class": "9A", "students": 36},
+    {"class": "10A", "students": 35}
+  ]
+}

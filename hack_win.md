@@ -176,6 +176,7 @@ The state machine in `services/workflow/state_machine.json` is not deployed (the
 - **`template.yaml:127`:** `/notifications/dispatch` is a public, unauthenticated route that invokes Bedrock, which is a cost-abuse vector. Remove the `Api` event, since only the state machine needs it, and add `MethodSettings` throttling on the API.
 
 ### M8. One-command test run (5 min, owner A)
+> **Status: DONE.** `run_all_tests.py` reconfigures stdout/stderr to UTF-8. Under `PYTHONIOENCODING=cp1252` it now prints `ALL 131 TESTS PASSED` and exits 0 (it used to crash after the run with exit 1).
 - `run_all_tests.py:28` prints `✅`, which crashes on Windows cp1252 **after** the tests pass, so the exit code is 1. Add `sys.stdout.reconfigure(encoding="utf-8")` at the top, or use ASCII.
 - `pytest` isn't installed in `.venv`, so either add it to a `requirements-dev.txt` or document `python run_all_tests.py`.
 
@@ -196,6 +197,13 @@ The state machine in `services/workflow/state_machine.json` is not deployed (the
 ---
 
 ### X-factor upgrades (agreed Oct 10, 16:10). Run after M3 in this order: X2 → X3 → X1 → X4
+
+> **X2 status: DONE locally (tested; deploys with the rest).**
+> - **Data:** `data/demo/indoor_air.json` holds the infiltration factors per ventilation type (`basis: assumption`, configurable). `venues.json` has 4 indoor venues; class homerooms are added automatically. `class_profiles.json` holds class sizes (counts only).
+> - **Choice:** each Plan B session gets `venue_choice`: the outdoor forecast, the chosen venue with its modelled indoor PM2.5 and factor, every alternative with its value or rejection reason (in use / already assigned / too small), and a `why`.
+> - **Exposure:** `plan_b_indoor_exposure_modelled` is reported. With no free room, the session is marked "cannot run" and its PE minutes count as lost.
+> - **Demo, Stage III:** every class is moved to a room with lower modelled PM2.5. In P2, 7A gets Hall_A (84 vs 280 outdoors) and 7B gets the Gym (140), because the hall is taken.
+> - **Evidence:** `tests/test_indoor_air.py` 10/10. It caught a real bug: the outdoor ground was being offered as a "classroom". Full suite 131/131.
 
 These replace U4 (S3 Object Lock is **dropped**; keep only the receipt QR code). Each must run on AWS on camera, or it stays out of the video.
 

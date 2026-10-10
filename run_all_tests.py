@@ -10,6 +10,10 @@ import sys
 import unittest
 
 def run_tests():
+    # Windows consoles default to cp1252, which cannot print the status emoji below.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
 

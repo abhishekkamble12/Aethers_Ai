@@ -123,6 +123,69 @@ def _plan_b(orig_row: Dict[str, Any], bad_period: Dict[str, Any], index: int) ->
     }
 
 
+def homeroom(timetable: List[Dict[str, Any]], cls: str, exclude=frozenset()) -> Optional[str]:
+    """The indoor venue a class uses most (its classroom). `exclude` holds (class, period) slots that are
+    being moved indoors: their venue is the outdoor ground they are leaving, not a classroom."""
+    counts: Dict[str, int] = {}
+    for p in timetable:
+        if p["class"] == cls and (p["class"], p["period"]) not in exclude and not p.get("outdoor") and p.get("venue"):
+            counts[p["venue"]] = counts.get(p["venue"], 0) + 1
+    return max(sorted(counts), key=counts.get) if counts else None
+
+
+def assign_indoor_venues(plan_b_fallbacks, final_timetable, forecast_map, venues, indoor_air, class_sizes) -> None:
+    """
+    X2: indoors is not automatically safe. For each Plan B session, model indoor PM2.5 in every candidate
+    venue (outdoor forecast x infiltration factor for its ventilation, a labelled assumption), skip venues
+    that are busy in that period, already given to another class, or too small, and pick the cleanest.
+    """
+    factors = indoor_air["infiltration"]
+    default_vent = indoor_air.get("default_ventilation", "normal")
+    taken: Dict[Tuple[str, str], str] = {}  # (venue, period) -> class, from Plan B assignments
+    moving = {(b["class"], b["period"]) for b in plan_b_fallbacks}
+    busy = {}
+    for r in final_timetable:  # venues in use, except the outdoor slots that Plan B classes are leaving
+        if (r["class"], r["period"]) not in moving and r.get("venue"):
+            busy.setdefault((r["venue"], r["period"]), r["class"])
+
+    for b in sorted(plan_b_fallbacks, key=lambda x: (x["period"], x["class"])):
+        prd, cls = b["period"], b["class"]
+        outdoor_pm = forecast_map.get(prd, {"nominal": 150.0})["nominal"]
+        students = class_sizes.get(cls)
+        candidates = [dict(v) for v in venues]
+        own = homeroom(final_timetable, cls, exclude=moving)
+        if own and all(v["venue_id"] != own for v in candidates):
+            candidates.append({"venue_id": own, "label": f"{cls} classroom", "ventilation": default_vent,
+                               "capacity": students})
+        options = []
+        for v in candidates:
+            vent = v.get("ventilation", default_vent)
+            factor = factors.get(vent, factors.get(default_vent))
+            entry = {"venue_id": v["venue_id"], "label": v.get("label"), "ventilation": vent,
+                     "infiltration_factor": factor, "indoor_pm25_modelled": round(outdoor_pm * factor, 1)}
+            if v["venue_id"] != own and (v["venue_id"], prd) in busy:
+                entry["rejected"] = f"in use by {busy[(v['venue_id'], prd)]} in {prd}"
+            elif (v["venue_id"], prd) in taken:
+                entry["rejected"] = f"already assigned to {taken[(v['venue_id'], prd)]} for Plan B in {prd}"
+            elif students and v.get("capacity") and v["capacity"] < students:
+                entry["rejected"] = f"capacity {v['capacity']} < {students} students"
+            options.append(entry)
+        free = sorted((o for o in options if "rejected" not in o), key=lambda o: (o["indoor_pm25_modelled"], o["venue_id"]))
+        chosen = free[0] if free else None
+        if chosen:
+            taken[(chosen["venue_id"], prd)] = cls
+        b["fallback_venue"] = chosen["venue_id"] if chosen else None
+        b["venue_choice"] = {
+            "outdoor_pm25_forecast": outdoor_pm,
+            "chosen": chosen,
+            "alternatives": [o for o in options if o is not chosen],
+            "basis": indoor_air.get("basis", "assumption"),
+            "assumption_note": indoor_air.get("note"),
+            "why": (f"lowest modelled indoor PM2.5 among free venues ({chosen['indoor_pm25_modelled']} vs "
+                    f"{outdoor_pm} outdoors)") if chosen else "no free indoor venue large enough: session cannot run",
+        }
+
+
 def pe_minutes_report(timetable, problematic_periods, plan_a_swaps, plan_b_fallbacks) -> Dict[str, Any]:
     """
     Measured from the timetable: where every scheduled PE minute ended up.
@@ -141,7 +204,9 @@ def pe_minutes_report(timetable, problematic_periods, plan_a_swaps, plan_b_fallb
         if key in moved:
             m["moved_to_cleaner_slot"] += mins
         elif key in replaced:
-            m["replaced_indoor_active" if replaced[key].get("activity_is_physical") else "lost"] += mins
+            fb = replaced[key]
+            has_room = fb.get("venue_choice") is None or fb["venue_choice"]["chosen"] is not None
+            m["replaced_indoor_active" if fb.get("activity_is_physical") and has_room else "lost"] += mins
         elif key in flagged:
             m["lost"] += mins  # flagged but neither moved nor replaced
         else:
@@ -164,7 +229,10 @@ def plan_schedule(
     school_jurisdiction: str = "Delhi",
     delta: float = 0.20,
     decision_id: str = "T1#2026-10-12#MORN",
-    day: Optional[str] = None
+    day: Optional[str] = None,
+    venues: Optional[List[Dict[str, Any]]] = None,
+    indoor_air: Optional[Dict[str, Any]] = None,
+    class_sizes: Optional[Dict[str, int]] = None
 ) -> Dict[str, Any]:
     """
     Executes the deterministic planner:
@@ -360,6 +428,20 @@ def plan_schedule(
         orig_row["outdoor"] = False
         revalidation["swaps_reverted"].append(f"{swap_info['class']} {swap_info['from_period']}->{swap_info['to_period']}")
 
+    # X2: place each Plan B session in the cleanest free indoor venue (modelled, labelled assumption)
+    indoor_exposure = None
+    if venues is not None and indoor_air is not None:
+        assign_indoor_venues(plan_b_fallbacks, working_timetable, forecast_map, venues, indoor_air, class_sizes or {})
+        traces = {(t["class"], t["period"]): t for t in decision_trace}
+        indoor_exposure = 0.0
+        for b in plan_b_fallbacks:
+            t = traces.get((b["class"], b["period"]))
+            if t and t["outcome"] and t["outcome"].get("plan") == "B":
+                t["outcome"]["venue"] = b["fallback_venue"]
+                t["outcome"]["venue_why"] = b["venue_choice"]["why"]
+            if b["venue_choice"]["chosen"]:
+                indoor_exposure += b["duration_minutes"] * b["venue_choice"]["chosen"]["indoor_pm25_modelled"]
+
     # Calculate final exposures
     exp_after_nom, exp_after_pess = evaluate_exposure(working_timetable, forecast_map, delta)
     red_pct = 0.0
@@ -375,6 +457,7 @@ def plan_schedule(
         "exposure_before": exp_before_nom,
         "exposure_after": exp_after_nom,
         "exposure_reduction_pct": red_pct,
+        "plan_b_indoor_exposure_modelled": indoor_exposure,
         **pe_minutes_report(timetable, problematic_periods, plan_a_swaps, plan_b_fallbacks),
         "ruleset_version": ruleset.get("ruleset_version", "unknown"),
         "classified_periods": classified_periods,

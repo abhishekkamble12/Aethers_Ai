@@ -1,0 +1,9 @@
+{
+  "note": "Indoor venues available for Plan B physical sessions. Class homerooms are added automatically with the default ventilation.",
+  "venues": [
+    {"venue_id": "Hall_A", "label": "Multipurpose Hall A (air purifiers)", "ventilation": "purifier", "capacity": 90},
+    {"venue_id": "Gym", "label": "Indoor Gymnasium (windows shut)", "ventilation": "sealed", "capacity": 60},
+    {"venue_id": "Activity_Room", "label": "Activity Room", "ventilation": "normal", "capacity": 45},
+    {"venue_id": "Verandah", "label": "Covered Verandah (open sides)", "ventilation": "open", "capacity": 80}
+  ]
+}

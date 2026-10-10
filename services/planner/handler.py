@@ -50,6 +50,19 @@ def _get_demo_fixtures():
     return timetable_records, forecast_data, ruleset_data
 
 
+def _get_school_config() -> Dict[str, Any]:
+    """Venues, indoor-air assumptions and class sizes (counts only) for the demo school."""
+    demo = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "demo")
+    def load(name):
+        with open(os.path.join(demo, name), "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {
+        "venues": load("venues.json")["venues"],
+        "indoor_air": load("indoor_air.json"),
+        "class_sizes": {c["class"]: c["students"] for c in load("class_profiles.json")["classes"]},
+    }
+
+
 def normalise_stage(raw: Any) -> str:
     """Accepts I-IV or 1-4; raises ValueError otherwise."""
     stage = STAGE_ALIASES.get(str(raw).strip(), str(raw).strip().upper())
@@ -91,7 +104,8 @@ def run_planner(run: Dict[str, str], execution: str = "") -> Dict[str, Any]:
         declared_stage=run["stage"],
         school_jurisdiction="Delhi",
         decision_id=run["decision_id"],
-        day=date.fromisoformat(run["date"]).strftime("%A")
+        day=date.fromisoformat(run["date"]).strftime("%A"),
+        **_get_school_config()
     )
 
     # What the decision was based on, so the audit row alone explains it.
@@ -107,7 +121,8 @@ def run_planner(run: Dict[str, str], execution: str = "") -> Dict[str, Any]:
         "fallbacks_count": len(plan_result["plan_b"]),
         "exposure_before": plan_result["exposure_before"],
         "exposure_after": plan_result["exposure_after"],
-        "pe_minutes_preserved": plan_result["pe_minutes_preserved"]
+        "pe_minutes_preserved": plan_result["pe_minutes_preserved"],
+        "indoor_air_assumptions": _get_school_config()["indoor_air"]["infiltration"]
     }
 
     audit_row, receipt_id = None, None
@@ -184,7 +199,8 @@ def rehearse_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         ruleset=ruleset_data,
         declared_stage=stage,
         school_jurisdiction="Delhi",
-        decision_id=f"REHEARSAL#STAGE_{stage}"
+        decision_id=f"REHEARSAL#STAGE_{stage}",
+        **_get_school_config()
     )
     plan_result["declared_stage"] = stage
     return respond(200, plan_result)
