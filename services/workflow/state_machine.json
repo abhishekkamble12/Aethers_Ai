@@ -11,7 +11,8 @@
           "tenant_id.$": "$.tenant_id",
           "date.$": "$.date",
           "stage.$": "$.stage",
-          "session.$": "$.session"
+          "session.$": "$.session",
+          "execution.$": "$$.Execution.Name"
         }
       },
       "ResultSelector": {
@@ -54,7 +55,8 @@
           "taskToken.$": "$$.Task.Token",
           "tenant_id.$": "$.tenant_id",
           "decision_id.$": "$.planner_output.decision.decision_id",
-          "escalation": false
+          "escalation": false,
+          "execution.$": "$$.Execution.Name"
         }
       },
       "ResultPath": "$.approval_result",
@@ -86,7 +88,8 @@
           "taskToken.$": "$$.Task.Token",
           "tenant_id.$": "$.tenant_id",
           "decision_id.$": "$.planner_output.decision.decision_id",
-          "escalation": true
+          "escalation": true,
+          "execution.$": "$$.Execution.Name"
         }
       },
       "ResultPath": "$.escalated_approval_result",
@@ -150,7 +153,8 @@
           "decision_id.$": "$.planner_output.decision.decision_id",
           "approval.$": "$.final_approval",
           "stage.$": "$.planner_output.decision.declared_stage",
-          "plan.$": "$.planner_output.decision"
+          "plan.$": "$.planner_output.decision",
+          "execution.$": "$$.Execution.Name"
         }
       },
       "ResultSelector": {

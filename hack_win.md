@@ -87,6 +87,13 @@ The state machine in `services/workflow/state_machine.json` is not deployed (the
 - **Idempotency (this is also drill 2, done for real):** start executions with `name = decision_id` with `#` replaced by `_`. A second start with the same name returns `ExecutionAlreadyExists`. Show that in the console.
 
 ### M3. Make the audit chain an actual chain (≈2.5 h, owner D)
+> **M3a status: PARTIAL (code done and tested locally; not deployed).**
+> - **Store:** `services/audit/store.py:append_audit` does one `TransactWriteItems`: `AUD#n` if not exists, `AUDHEAD` only if `seq = n-1`, and an optional `AUDKEY#` so retries can't log twice. On conflict it re-reads the head and retries.
+> - **Wired in:** planner (`PLAN_GENERATED`, which records the stage, ruleset version and SHA-256, the forecast snapshot with `is_replay`, and plan/timetable digests), `APPROVAL_REQUESTED`, `APPROVAL_RECEIVED` (role from the token), `NOTICES_DRAFTED` (per notice: `model_used`, `fallback_used`, text SHA-256), and the 5 terminal workflow events. The always-row-1 genesis write and the M2a log-only stub are gone.
+> - **The verifier now also re-checks each stored payload against its digest.** Before, an edited payload passed verification.
+> - **Evidence:** `test_audit_store` 9/9 (a real 4-thread race with 7 retried conflicts gives a gapless chain of 20; editing a row is detected at its seq; editing a payload is detected; history can't be overwritten). `test_audit_wiring` 6/6 (real handlers driven through `state_machine.json` write a 5-row chain that verifies, short IDs and task tokens never enter it, and a retried audit doesn't double-log). Full suite 91/91; `sam build` OK.
+> - **Limitation to state honestly:** someone with write access who rewrites *every* row from some point onward, recomputing the hashes, isn't detectable from the chain alone. Publishing the head hash on each notice and receipt (the QR) is what pins it. Moto's `transact_write_items` isn't thread-safe, so the race test serialises each transaction to stand in for DynamoDB's atomicity.
+> - **M3b (next):** `GET /receipts/{id}` reads this chain (the hardcoded `DEMO_CHAIN` gets deleted), and `web/verify.html` points at it.
 - **Problem:** `planner/handler.py:423` always creates `seq=1, prev_hash=GENESIS` and `put_item`s `AUD#000001`, so every run overwrites it. `audit/handler.py:116` serves a hardcoded `DEMO_CHAIN`. The "Proves it" beat currently proves nothing.
 - **Fix:**
   1. Add `services/audit/store.py: append_audit(table, tenant_id, actor_role, event, payload)`:

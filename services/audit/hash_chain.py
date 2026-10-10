@@ -99,6 +99,10 @@ def verify_audit_chain(rows: List[Dict[str, Any]]) -> Tuple[bool, str, int]:
         if recomputed != row_hash:
             return False, f"Tampered record at seq {seq}! Recomputed hash {recomputed} does not match {row_hash}", idx
 
+        # 4. When the payload is published alongside the row, it must match the digest that was hashed
+        if "payload" in row and compute_payload_digest(row["payload"]) != row.get("payload_digest"):
+            return False, f"Tampered payload at seq {seq}! Payload no longer matches its payload_digest", idx
+
         current_expected_prev = row_hash
 
     return True, f"All {len(rows)} records mathematically verified against SHA256 chain.", -1

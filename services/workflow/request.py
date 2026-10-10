@@ -13,6 +13,7 @@ from typing import Any, Dict
 
 import boto3
 
+from services.audit.store import append_audit
 from services.workflow.decision_store import decision_key, parse_decision_id
 from services.workflow.token_store import issue_token
 
@@ -49,6 +50,10 @@ def request_approval_handler(event: Dict[str, Any], context: Any) -> Dict[str, A
             ":p": {"short_id": issued["short_id"], "role": role, "expires_at": issued["expires_at"]},
         },
     )
+    # The short ID is a live credential: it goes to the Brief, never into logs or the audit chain.
+    append_audit(table, tenant_id, "workflow", "APPROVAL_REQUESTED",
+                 {"decision_id": decision_id, "awaiting_role": role, "expires_at": issued["expires_at"]},
+                 idempotency_key=f"{event['execution']}#APPROVAL_REQUESTED#{role}" if event.get("execution") else None)
     # Never log the task token.
     logger.info("Approval requested decision=%s role=%s expires_at=%s",
                 decision_id, role, issued["expires_at"])

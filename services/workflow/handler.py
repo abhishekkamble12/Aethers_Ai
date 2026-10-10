@@ -16,6 +16,7 @@ from typing import Any, Dict
 import boto3
 from botocore.exceptions import ClientError
 
+from services.audit.store import append_audit
 from services.common.http import ApiError, guarded, json_body, respond
 from services.workflow.decision_store import decision_key
 from services.workflow.token_store import consume_token, is_valid_short_id, release_token
@@ -72,4 +73,16 @@ def approval_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         ExpressionAttributeValues={":s": action, ":r": record["role"], ":t": decided_at},
     )
     logger.info("Decision %s: %s by %s", record["decision_id"], action, record["role"])
-    return respond(200, {"status": "recorded", "decision_id": record["decision_id"], **result})
+
+    # The workflow is already resumed; an audit hiccup must not turn a real decision into an error.
+    # The terminal workflow audit (AuditCloseApproved / FailSafeRejected) records the action again.
+    audit = {"recorded": True}
+    try:
+        row = append_audit(table, record["tenant_id"], record["role"], "APPROVAL_RECEIVED",
+                           {"decision_id": record["decision_id"], "action": action, "decided_at": decided_at},
+                           idempotency_key=f"{short_id}#APPROVAL_RECEIVED")
+        audit["seq"] = row["seq"]
+    except Exception:
+        logger.exception("Audit append failed for approval of %s", record["decision_id"])
+        audit = {"recorded": False}
+    return respond(200, {"status": "recorded", "decision_id": record["decision_id"], **result, "audit": audit})

@@ -13,7 +13,9 @@ import boto3
 
 from services.planner.planner import plan_schedule
 from services.planner.csv_loader import load_timetable_csv
-from services.audit.hash_chain import GENESIS_HASH, create_audit_row
+from services.audit.hash_chain import compute_payload_digest
+from services.audit.store import append_audit
+from services.circular.diff_engine import compute_ruleset_hash
 from services.common.http import ApiError, guarded, is_http_event, json_body, respond
 
 logger = logging.getLogger()
@@ -77,8 +79,8 @@ def parse_run_input(event: Dict[str, Any]) -> Dict[str, str]:
     }
 
 
-def run_planner(run: Dict[str, str]) -> Dict[str, Any]:
-    """Plans one decision, persists it when running in AWS, and returns {decision, audit_head}."""
+def run_planner(run: Dict[str, str], execution: str = "") -> Dict[str, Any]:
+    """Plans one decision, persists it and its audit row when running in AWS, returns {decision, audit_head}."""
     timetable_records, forecast_data, ruleset_data = _get_demo_fixtures()
 
     plan_result = plan_schedule(
@@ -90,25 +92,29 @@ def run_planner(run: Dict[str, str]) -> Dict[str, Any]:
         decision_id=run["decision_id"]
     )
 
-    # NOTE: single genesis row until hack_win M3 replaces this with a persisted, conditional chain append.
-    audit_row = create_audit_row(
-        seq=1,
-        prev_hash=GENESIS_HASH,
-        actor_role="scheduler:planner",
-        event="DECISION_PLAN_GENERATED",
-        payload={
-            "decision_id": run["decision_id"],
-            "swaps_count": len(plan_result["plan_a"]),
-            "fallbacks_count": len(plan_result["plan_b"]),
-            "exposure_before": plan_result["exposure_before"],
-            "exposure_after": plan_result["exposure_after"],
-            "pe_minutes_preserved": plan_result["pe_minutes_preserved"]
-        }
-    )
+    # What the decision was based on, so the audit row alone explains it.
+    audit_payload = {
+        "decision_id": run["decision_id"],
+        "declared_stage": run["stage"],
+        "ruleset_version": ruleset_data.get("ruleset_version"),
+        "ruleset_sha256": compute_ruleset_hash(ruleset_data),
+        "forecast": {k: forecast_data.get(k) for k in ("grid_cell", "date", "generated_at", "model", "is_replay")},
+        "timetable_sha256": compute_payload_digest(timetable_records),
+        "plan_sha256": compute_payload_digest(plan_result),
+        "swaps_count": len(plan_result["plan_a"]),
+        "fallbacks_count": len(plan_result["plan_b"]),
+        "exposure_before": plan_result["exposure_before"],
+        "exposure_after": plan_result["exposure_after"],
+        "pe_minutes_preserved": plan_result["pe_minutes_preserved"]
+    }
 
+    audit_row = None
     if os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
         # Fail loudly: a workflow must never wait for approval of a decision that was not stored.
         table = boto3.resource("dynamodb").Table(TABLE_NAME)
+        audit_row = append_audit(
+            table, run["tenant_id"], "scheduler:planner", "PLAN_GENERATED", audit_payload,
+            idempotency_key=f"{execution}#PLAN_GENERATED" if execution else None)
         table.put_item(
             Item={
                 "PK": run["tenant_id"],
@@ -118,17 +124,12 @@ def run_planner(run: Dict[str, str]) -> Dict[str, Any]:
                 "status": "PLANNED",
                 "declared_stage": run["stage"],
                 "data": json.dumps(plan_result),
-                "audit_head_hash": audit_row["hash"]
-            }
-        )
-        table.put_item(
-            Item={
-                "PK": run["tenant_id"],
-                "SK": f"AUD#{audit_row['seq']:06d}",
-                "data": json.dumps(audit_row)
+                "audit_seq": audit_row["seq"],
+                "audit_hash": audit_row["hash"]
             }
         )
 
+    # audit_head is None for local runs: nothing was persisted, so there is no chain to point at.
     return {"decision": plan_result, "audit_head": audit_row}
 
 
@@ -140,7 +141,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     - API Gateway: same result wrapped in an HTTP response, with clean 400s.
     """
     if not is_http_event(event):
-        return run_planner(parse_run_input(event or {}))
+        return run_planner(parse_run_input(event or {}), execution=str((event or {}).get("execution", "")))
     return _planner_http(event, context)
 
 

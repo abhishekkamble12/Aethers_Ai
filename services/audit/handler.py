@@ -66,12 +66,29 @@ def receipt_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     }
 
 
+
+WORKFLOW_EVENTS = ("RUN_CLOSED_NO_CHANGE", "RUN_CLOSED_APPROVED_AND_NOTIFIED", "REJECTED_NO_BROADCAST",
+                   "FAILSAFE_TIMEOUT_NO_BROADCAST", "WORKFLOW_ERROR_NO_BROADCAST")
+
+
 def audit_event_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Step Functions audit states (AuditCloseNoChange / AuditCloseApproved / FailSafeNoBroadcast).
-    INTERIM (hack_win M2a): logs the workflow event only and reports persisted=False.
-    hack_win M3 replaces this with a conditional, hash-chained DynamoDB append.
+    Terminal Step Functions states (AuditCloseNoChange / AuditCloseApproved / FailSafe*).
+    Appends one hash-chained row per execution and outcome; a retried invocation returns the
+    row already written instead of logging the outcome twice.
     """
-    import logging
-    logging.getLogger().info("Workflow audit event %s tenant=%s", event.get("event"), event.get("tenant_id"))
-    return {"event": event.get("event"), "tenant_id": event.get("tenant_id"), "persisted": False}
+    import os
+    import boto3
+    from services.audit.store import append_audit
+
+    name = event.get("event")
+    tenant_id = event.get("tenant_id")
+    if name not in WORKFLOW_EVENTS or not tenant_id:
+        raise ValueError(f"audit event must be one of {WORKFLOW_EVENTS} with a tenant_id")
+    payload = {k: v for k, v in event.items() if k not in ("event", "tenant_id")}
+    if isinstance(payload.get("cause"), str):
+        payload["cause"] = payload["cause"][:500]  # Step Functions error causes can be long
+    table = boto3.resource("dynamodb").Table(os.environ["TABLE_NAME"])
+    row = append_audit(table, tenant_id, "workflow", name, payload,
+                       idempotency_key=f"{event['execution']}#{name}" if event.get("execution") else None)
+    return {"event": name, "seq": row["seq"], "hash": row["hash"], "persisted": True}
