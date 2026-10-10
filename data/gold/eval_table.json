@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-10T11:47:33.813756+00:00",
+  "generated_at": "2026-10-10T19:30:47.206360+00:00",
   "what_this_measures": "The code validator only. Candidate rules are hand-entered from one real circular; there is no model extraction yet (hack_win M4).",
   "dataset_size": {
     "real_circulars": 1,
