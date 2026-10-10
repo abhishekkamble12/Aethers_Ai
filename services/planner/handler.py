@@ -90,7 +90,8 @@ def run_planner(run: Dict[str, str], execution: str = "") -> Dict[str, Any]:
         ruleset=ruleset_data,
         declared_stage=run["stage"],
         school_jurisdiction="Delhi",
-        decision_id=run["decision_id"]
+        decision_id=run["decision_id"],
+        day=date.fromisoformat(run["date"]).strftime("%A")
     )
 
     # What the decision was based on, so the audit row alone explains it.

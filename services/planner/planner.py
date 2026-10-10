@@ -5,8 +5,8 @@ Deterministic scheduling algorithm matching CAQM Sept 16, 2026 guidelines:
 """
 
 import copy
-from typing import List, Dict, Any, Tuple
-from services.rules.rules_engine import classify_period
+from typing import List, Dict, Any, Optional, Tuple
+from services.rules.rules_engine import classify_period, get_class_band
 
 DEFAULT_INDOOR_ACTIVITIES = {
     "primary": [
@@ -35,21 +35,6 @@ DEFAULT_INDOOR_ACTIVITIES = {
     ]
 }
 
-def get_class_band(class_name: str) -> str:
-    """Extracts band: primary (1-5), middle (6-8), secondary (9-10), senior (11-12)."""
-    digits = "".join([c for c in class_name if c.isdigit()])
-    if not digits:
-        return "all"
-    val = int(digits)
-    if val <= 5:
-        return "primary"
-    elif val <= 8:
-        return "middle"
-    elif val <= 10:
-        return "secondary"
-    else:
-        return "senior_secondary"
-
 def calculate_duration_minutes(start_str: str, end_str: str) -> int:
     """Calculates minutes between HH:MM and HH:MM."""
     try:
@@ -58,26 +43,6 @@ def calculate_duration_minutes(start_str: str, end_str: str) -> int:
         return max(0, (eh * 60 + em) - (sh * 60 + sm))
     except Exception:
         return 40 # Standard default period duration
-
-def build_teacher_timetable_index(periods: List[Dict[str, Any]]) -> Dict[Tuple[str, str], str]:
-    """Map of (teacher_code, period) -> class_id to detect teacher clashes."""
-    index = {}
-    for p in periods:
-        t = p.get("teacher_code")
-        prd = p.get("period")
-        if t and prd:
-            index[(t, prd)] = p.get("class", "")
-    return index
-
-def build_venue_timetable_index(periods: List[Dict[str, Any]]) -> Dict[Tuple[str, str], str]:
-    """Map of (venue, period) -> class_id to detect double-booking of grounds."""
-    index = {}
-    for p in periods:
-        v = p.get("venue")
-        prd = p.get("period")
-        if v and prd:
-            index[(v, prd)] = p.get("class", "")
-    return index
 
 def evaluate_exposure(
     periods: List[Dict[str, Any]],
@@ -102,6 +67,51 @@ def evaluate_exposure(
     return e_nominal, e_pessimistic
 
 
+MOVABLE_FIELDS = ("subject", "teacher_code", "venue", "outdoor")
+
+
+def _swap_content(a: Dict[str, Any], b: Dict[str, Any]) -> None:
+    for f in MOVABLE_FIELDS:
+        a[f], b[f] = b.get(f), a.get(f)
+
+
+def find_conflicts(periods: List[Dict[str, Any]]) -> Dict[Tuple[str, str, str, str], frozenset]:
+    """(kind, who, day, period) -> classes, wherever one teacher or venue is in two classes at once."""
+    occupancy: Dict[Tuple[str, str, str, str], set] = {}
+    for p in periods:
+        day, prd = p.get("day", ""), p.get("period", "")
+        for kind, who in (("teacher", p.get("teacher_code")), ("venue", p.get("venue"))):
+            if who:
+                occupancy.setdefault((kind, who, day, prd), set()).add(p.get("class", ""))
+    return {k: frozenset(v) for k, v in occupancy.items() if len(v) > 1}
+
+
+def _new_conflicts(baseline, after):
+    """Clashes in `after` that the input timetable did not already have."""
+    return {k: v for k, v in after.items() if not (k in baseline and v <= baseline[k])}
+
+
+def describe_conflict(key, classes) -> str:
+    kind, who, day, prd = key
+    return f"{kind} {who} would be in {', '.join(sorted(classes))} at once in {prd}" + (f" ({day})" if day else "")
+
+
+def _plan_b(orig_row: Dict[str, Any], bad_period: Dict[str, Any], index: int) -> Dict[str, Any]:
+    band = get_class_band(orig_row["class"])
+    activities = DEFAULT_INDOOR_ACTIVITIES.get(band, DEFAULT_INDOOR_ACTIVITIES["all"])
+    return {
+        "class": orig_row["class"],
+        "period": orig_row["period"],
+        "subject": orig_row["subject"],
+        "venue": orig_row.get("venue", "Ground"),
+        "fallback_venue": "Indoor Hall / Classroom",
+        "assigned_activity": activities[index % len(activities)],
+        "duration_minutes": calculate_duration_minutes(orig_row.get("start", ""), orig_row.get("end", "")),
+        "reason": bad_period.get("reason", "Outdoor sports prohibited; replaced with indoor session to preserve activity minutes."),
+        "rule_id": bad_period.get("rule_ids", ["r-017"])[0] if bad_period.get("rule_ids") else "r-017"
+    }
+
+
 def plan_schedule(
     timetable: List[Dict[str, Any]],
     forecast: Dict[str, Any],
@@ -109,7 +119,8 @@ def plan_schedule(
     declared_stage: str,
     school_jurisdiction: str = "Delhi",
     delta: float = 0.20,
-    decision_id: str = "T1#2026-10-12#MORN"
+    decision_id: str = "T1#2026-10-12#MORN",
+    day: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Executes the deterministic planner:
@@ -119,6 +130,22 @@ def plan_schedule(
     4. For unswappable periods, assigns Plan B (Indoor Wellness Activity).
     5. Calculates preserved PE minutes and modelled exposure reduction.
     """
+    # 0. Plan one school day. Rows without a day are kept (single-day timetables).
+    if day:
+        timetable = [p for p in timetable if not p.get("day") or p["day"].strip().lower() == day.lower()]
+        if not timetable:
+            return {
+                "decision_id": decision_id, "declared_stage": declared_stage, "day": day,
+                "status": "confirmed_no_change", "message": f"No classes scheduled on {day}.",
+                "plan_a": [], "plan_b": [], "exposure_before": 0.0, "exposure_after": 0.0,
+                "exposure_reduction_pct": 0.0, "pe_minutes_preserved": 0.0,
+                "ruleset_version": ruleset.get("ruleset_version", "unknown"),
+                "classified_periods": [], "decision_trace": [],
+                "revalidation": {"new_conflicts_found": 0, "swaps_reverted": []}
+            }
+
+    input_conflicts = [describe_conflict(k, v).replace(" would be", " is") for k, v in sorted(find_conflicts(timetable).items())]
+
     # 1. Build forecast lookup
     forecast_map = {}
     for fp in forecast.get("periods", []):
@@ -175,104 +202,88 @@ def plan_schedule(
             "exposure_reduction_pct": 0.0,
             "pe_minutes_preserved": 100.0 if original_pe_minutes > 0 else 0.0,
             "ruleset_version": ruleset.get("ruleset_version", "unknown"),
-            "classified_periods": classified_periods
+            "classified_periods": classified_periods,
+            "input_conflicts": input_conflicts,
+            "decision_trace": [],
+            "revalidation": {"new_conflicts_found": 0, "swaps_reverted": []}
         }
 
-    # Prepare working copies for swapping
+    # Prepare a working copy of the day. Swaps exchange the movable content of two periods of the
+    # same class (subject, teacher, venue, outdoor); times stay with the slot.
     working_timetable = [copy.deepcopy(p) for p in timetable]
-    teacher_index = build_teacher_timetable_index(working_timetable)
-    venue_index = build_venue_timetable_index(working_timetable)
+    baseline_conflicts = find_conflicts(working_timetable)
 
     plan_a_swaps = []
     plan_b_fallbacks = []
-    swapped_target_slots = set() # (class, period) slots already used
+    decision_trace = []
+    applied = []  # (swap_info, orig_row, partner_row) for fail-closed revalidation
+    swapped_target_slots = set()  # (class, period) slots already used
 
     for bad_period in problematic_periods:
         cls_id = bad_period["class"]
         orig_prd_id = bad_period["period"]
         orig_row = next((p for p in working_timetable if p["class"] == cls_id and p["period"] == orig_prd_id), None)
-        
         if not orig_row:
             continue
-            
-        pe_teacher = orig_row.get("teacher_code")
-        pe_venue = orig_row.get("venue")
+
         orig_fc = forecast_map.get(orig_prd_id, {"nominal": 200.0, "pessimistic": 240.0})
+        trace = {
+            "class": cls_id, "period": orig_prd_id, "subject": orig_row.get("subject"),
+            "label": bad_period["label"], "reason": bad_period["reason"], "rule_ids": bad_period.get("rule_ids", []),
+            "forecast_pm25": orig_fc, "candidates": [], "outcome": None,
+        }
 
-        # Try to find valid swap partner within the same class
-        class_candidates = [
-            p for p in working_timetable
-            if p["class"] == cls_id
-            and p["period"] != orig_prd_id
-            and not p.get("locked")
-            and not p.get("outdoor") # Partner must be an indoor period
-            and (cls_id, p["period"]) not in swapped_target_slots
-        ]
-
-        best_partner = None
-        best_score = -999999
-
-        for candidate in class_candidates:
+        best_partner, best_score = None, None
+        for candidate in [p for p in working_timetable if p["class"] == cls_id and p["period"] != orig_prd_id]:
             target_prd_id = candidate["period"]
             target_fc = forecast_map.get(target_prd_id, {"nominal": 150.0, "pessimistic": 180.0})
-            
-            # HARD CONSTRAINT 1: Target period MUST be permitted under nominal AND pessimistic forecast
-            # Test classifying the moved outdoor session in target_prd_id
-            target_classification_nom = classify_period(
-                period={**orig_row, "period": target_prd_id, "start": candidate["start"], "end": candidate["end"]},
-                forecast_pm25=target_fc["nominal"],
-                ruleset=ruleset,
-                declared_stage=declared_stage,
-                school_jurisdiction=school_jurisdiction
-            )
-            target_classification_pess = classify_period(
-                period={**orig_row, "period": target_prd_id, "start": candidate["start"], "end": candidate["end"]},
-                forecast_pm25=target_fc["pessimistic"],
-                ruleset=ruleset,
-                declared_stage=declared_stage,
-                school_jurisdiction=school_jurisdiction
-            )
+            reasons = []
 
-            # If moving outdoor to this slot would still be banned or restricted under nominal or pessimistic -> REJECT
-            if target_classification_nom["label"] in ("banned", "restricted"):
-                continue
-            if target_classification_pess["label"] in ("banned", "restricted"):
-                continue
+            if candidate.get("locked"):
+                reasons.append("locked period")
+            if candidate.get("outdoor"):
+                reasons.append("partner period is also outdoor")
+            if (cls_id, target_prd_id) in swapped_target_slots:
+                reasons.append("slot already used by another swap")
 
-            # HARD CONSTRAINT 2: Teacher availability
-            # Check if PE teacher is free during target_prd_id in other classes
-            existing_pe_teacher_busy = teacher_index.get((pe_teacher, target_prd_id))
-            if existing_pe_teacher_busy and existing_pe_teacher_busy != cls_id:
-                continue # Teacher is busy teaching another class!
+            if not reasons:
+                # HARD CONSTRAINT 1: the moved outdoor session must be permitted in the target slot
+                # under both the nominal and the pessimistic forecast.
+                for kind in ("nominal", "pessimistic"):
+                    c = classify_period(
+                        period={**orig_row, "period": target_prd_id, "start": candidate["start"], "end": candidate["end"]},
+                        forecast_pm25=target_fc[kind], ruleset=ruleset, declared_stage=declared_stage,
+                        school_jurisdiction=school_jurisdiction
+                    )
+                    if c["label"] in ("banned", "restricted"):
+                        reasons.append(f"{kind} forecast: {c['label']} ({c['reason']})")
+                        break
 
-            # Check if candidate's indoor teacher is free during orig_prd_id in other classes
-            indoor_teacher = candidate.get("teacher_code")
-            existing_indoor_teacher_busy = teacher_index.get((indoor_teacher, orig_prd_id))
-            if existing_indoor_teacher_busy and existing_indoor_teacher_busy != cls_id:
-                continue # Indoor teacher busy during original period!
+            if not reasons:
+                # HARD CONSTRAINT 2: modelled exposure strictly decreases
+                if orig_fc["nominal"] - target_fc["nominal"] <= 0:
+                    reasons.append(f"no exposure reduction ({target_fc['nominal']:.0f} vs {orig_fc['nominal']:.0f} µg/m³)")
 
-            # HARD CONSTRAINT 3: Ground / Venue availability
-            # Check if pe_venue is already booked by another class in target_prd_id
-            existing_venue_booked = venue_index.get((pe_venue, target_prd_id))
-            if existing_venue_booked and existing_venue_booked != cls_id:
-                continue # Ground is double-booked!
+            if not reasons:
+                # HARD CONSTRAINT 3: the swapped day introduces no new teacher or venue clash
+                _swap_content(orig_row, candidate)
+                new = _new_conflicts(baseline_conflicts, find_conflicts(working_timetable))
+                _swap_content(orig_row, candidate)  # undo the trial
+                reasons.extend(describe_conflict(k, v) for k, v in sorted(new.items()))
 
-            # HARD CONSTRAINT 4: Modelled exposure strictly decreases
-            exposure_reduction = orig_fc["nominal"] - target_fc["nominal"]
-            if exposure_reduction <= 0:
-                continue # Must strictly reduce exposure!
-
-            score = exposure_reduction
-            if score > best_score:
-                best_score = score
-                best_partner = candidate
+            entry = {"period": target_prd_id, "subject": candidate.get("subject"), "forecast_pm25": target_fc,
+                     "verdict": "rejected" if reasons else "valid", "reasons": reasons}
+            trace["candidates"].append(entry)
+            if not reasons:
+                score = orig_fc["nominal"] - target_fc["nominal"]
+                if best_score is None or score > best_score:
+                    best_score, best_partner = score, candidate
 
         if best_partner:
-            # We found a valid swap!
             target_prd_id = best_partner["period"]
-            
-            # Apply swap in working copy
-            # Swap subjects, teachers, venues, and outdoor flags between orig_row and best_partner
+            for entry in trace["candidates"]:
+                if entry["period"] == target_prd_id:
+                    entry["verdict"] = "chosen"
             swap_info = {
                 "class": cls_id,
                 "from_period": orig_prd_id,
@@ -284,38 +295,35 @@ def plan_schedule(
                 "exposure_after": forecast_map[target_prd_id]["nominal"],
                 "rule_id": bad_period.get("rule_ids", ["r-order"])[0] if bad_period.get("rule_ids") else "r-order"
             }
+            _swap_content(orig_row, best_partner)
             plan_a_swaps.append(swap_info)
+            applied.append((swap_info, orig_row, best_partner))
             swapped_target_slots.add((cls_id, target_prd_id))
-
-            # Update indices to maintain mutual exclusivity
-            teacher_index[(pe_teacher, target_prd_id)] = cls_id
-            teacher_index[(pe_teacher, orig_prd_id)] = None
-            venue_index[(pe_venue, target_prd_id)] = cls_id
-            venue_index[(pe_venue, orig_prd_id)] = None
-
-            # Mark in working copy
-            orig_row["outdoor"] = False
-            best_partner["outdoor"] = True
-            
+            trace["outcome"] = {"plan": "A", "moved_to": target_prd_id}
         else:
-            # No valid swap possible -> PLAN B FALLBACK (Indoor Wellness Session)
-            band = get_class_band(cls_id)
-            activities = DEFAULT_INDOOR_ACTIVITIES.get(band, DEFAULT_INDOOR_ACTIVITIES["all"])
-            selected_activity = activities[len(plan_b_fallbacks) % len(activities)]
-            
-            plan_b_fallbacks.append({
-                "class": cls_id,
-                "period": orig_prd_id,
-                "subject": orig_row["subject"],
-                "venue": orig_row.get("venue", "Ground"),
-                "fallback_venue": "Indoor Hall / Classroom",
-                "assigned_activity": selected_activity,
-                "duration_minutes": calculate_duration_minutes(orig_row.get("start", ""), orig_row.get("end", "")),
-                "reason": bad_period.get("reason", "Outdoor sports prohibited; replaced with indoor session to preserve activity minutes."),
-                "rule_id": bad_period.get("rule_ids", ["r-017"])[0] if bad_period.get("rule_ids") else "r-017"
-            })
-            # In working copy, mark as indoor
+            fallback = _plan_b(orig_row, bad_period, len(plan_b_fallbacks))
+            plan_b_fallbacks.append(fallback)
             orig_row["outdoor"] = False
+            trace["outcome"] = {"plan": "B", "activity": fallback["assigned_activity"],
+                                "why": "no candidate period passed every hard constraint"}
+        decision_trace.append(trace)
+
+    # Whole-day revalidation, fail closed: if the final day has any clash the input did not have,
+    # undo swaps (latest first) and give those classes Plan B instead.
+    revalidation = {"new_conflicts_found": 0, "swaps_reverted": []}
+    while applied:
+        new = _new_conflicts(baseline_conflicts, find_conflicts(working_timetable))
+        if not new:
+            break
+        revalidation["new_conflicts_found"] += len(new)
+        swap_info, orig_row, partner = applied.pop()
+        _swap_content(orig_row, partner)
+        plan_a_swaps.remove(swap_info)
+        bad = next(b for b in problematic_periods
+                   if b["class"] == swap_info["class"] and b["period"] == swap_info["from_period"])
+        plan_b_fallbacks.append(_plan_b(orig_row, bad, len(plan_b_fallbacks)))
+        orig_row["outdoor"] = False
+        revalidation["swaps_reverted"].append(f"{swap_info['class']} {swap_info['from_period']}->{swap_info['to_period']}")
 
     # Calculate final exposures
     exp_after_nom, exp_after_pess = evaluate_exposure(working_timetable, forecast_map, delta)
@@ -358,5 +366,8 @@ def plan_schedule(
         "exposure_reduction_pct": red_pct,
         "pe_minutes_preserved": pe_preserved_pct,
         "ruleset_version": ruleset.get("ruleset_version", "unknown"),
-        "classified_periods": classified_periods
+        "classified_periods": classified_periods,
+        "input_conflicts": input_conflicts,
+        "decision_trace": decision_trace,
+        "revalidation": revalidation
     }

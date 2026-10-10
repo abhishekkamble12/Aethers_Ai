@@ -141,6 +141,14 @@ The state machine in `services/workflow/state_machine.json` is not deployed (the
 - **`data/gold/eval_table.json`:** regenerate it from M4. Never hand-edit it.
 
 ### M6. Planner correctness (≈2 h, owner B)
+> **Status: DONE locally (tested; deploys with the rest).**
+> - **Double-booking:** each candidate swap is simulated on a copy of the day (subject, teacher, venue and outdoor actually move) and rejected if it creates any clash the input didn't already have. The stale index is gone. Audit repro: OLD swaps leave `T_M` in X and Y at P1; NEW picks the next valid slot and the final day has 0 clashes.
+> - **Whole-day revalidation** fails closed (reverts the latest swaps to Plan B, reported in `revalidation`).
+> - **Day:** the handler plans the weekday of the date; Sunday gives `confirmed_no_change` with "No classes scheduled on Sunday."
+> - **Rules:** they bind only the `class_band` and `applies_to` they name.
+> - **Demo CSV:** 3 input clashes fixed (T_CS1 P7, T_LIB1 P8, Ground_A P2). Remaining input clashes are reported in `input_conflicts`.
+> - **Explainability (core of U2, pulled forward):** `decision_trace` gives each intervention's rule IDs and quote, the forecast used, and every candidate period with `chosen`/`rejected` and the exact reasons.
+> - **Evidence:** `tests/test_planner_m6.py` 11/11; the 13 original planner tests still pass unchanged; full suite 110/110; `sam build` OK.
 - **Confirmed bug, teacher double-booking after swaps:**
   - `planner.py:291-294` updates the index for the PE teacher only. The **indoor partner's teacher** moves into the original period, but `teacher_index` is never updated.
   - Repro: class X has PE at P1 and Math (T_M) at P2; class Y has PE at P1 and Math (T_M) at P5. The planner swaps both, so T_M teaches X and Y at P1.

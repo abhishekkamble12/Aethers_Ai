@@ -18,6 +18,31 @@ class JurisdictionMismatchError(RulesEngineError):
     pass
 
 
+def get_class_band(class_name: str) -> str:
+    """Extracts band: primary (1-5), middle (6-8), secondary (9-10), senior_secondary (11-12)."""
+    digits = "".join([c for c in class_name if c.isdigit()])
+    if not digits:
+        return "all"
+    val = int(digits)
+    if val <= 5:
+        return "primary"
+    elif val <= 8:
+        return "middle"
+    elif val <= 10:
+        return "secondary"
+    else:
+        return "senior_secondary"
+
+
+def rule_applies_to_class(rule: Dict[str, Any], class_id: str) -> bool:
+    """A rule binds a period only if it targets schools and the class's band (or 'all')."""
+    applies_to = rule.get("applies_to")
+    if applies_to and "school" not in applies_to:
+        return False
+    bands = rule.get("class_band")
+    return not bands or "all" in bands or get_class_band(class_id) in bands
+
+
 def validate_ruleset_jurisdiction(ruleset: Dict[str, Any], target_jurisdiction: str):
     """
     Validates that the ruleset applies to the target school's jurisdiction.
@@ -95,6 +120,8 @@ def classify_period(
     
     rules = ruleset.get("rules", [])
     for rule in rules:
+        if not rule_applies_to_class(rule, class_id):
+            continue
         cond = rule.get("condition", {})
         min_stage = cond.get("stage_at_least")
         pm_threshold = cond.get("pm25_greater_than")
