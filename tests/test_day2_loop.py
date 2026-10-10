@@ -11,7 +11,7 @@ Verifies:
 import unittest
 from services.workflow.workflow_manager import WorkflowManager
 from services.planner.teacher_schedule import generate_teacher_schedules
-from services.circular.diff_engine import compute_ruleset_diff, compute_ruleset_hash
+from services.circular.diff_engine import compute_ruleset_diff
 from services.notify.drafting import draft_notice, generate_parent_broadcast_package
 
 class TestDay2Loop(unittest.TestCase):

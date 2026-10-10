@@ -4,7 +4,6 @@ Allows a school principal or administrator to define Standing Orders:
 e.g. "If CAQM declares Stage III or higher, automatically execute Plan B and notify teachers without morning approval bottleneck."
 """
 
-import json
 from typing import Dict, Any, Optional
 
 class StandingOrderManager:

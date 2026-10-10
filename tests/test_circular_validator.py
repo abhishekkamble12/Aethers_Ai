@@ -5,8 +5,7 @@ Test suite for Circular Candidate Validator & Refusal Detection
 import unittest
 import json
 from services.circular.validator import (
-    validate_ruleset_candidates,
-    HostileInstructionDetected
+    validate_ruleset_candidates
 )
 
 class TestCircularValidator(unittest.TestCase):

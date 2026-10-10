@@ -6,7 +6,6 @@ Code validates every candidate:
 3. Refusal moment: Rejects hallucinated quotes and prompt injection attacks
 """
 
-import json
 from typing import Dict, Any, List, Tuple
 
 VALID_STAGES = {"I", "II", "III", "IV"}

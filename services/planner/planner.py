@@ -5,8 +5,8 @@ Deterministic scheduling algorithm matching CAQM Sept 16, 2026 guidelines:
 """
 
 import copy
-from typing import List, Dict, Any, Tuple, Optional
-from services.rules.rules_engine import classify_period, JurisdictionMismatchError
+from typing import List, Dict, Any, Tuple
+from services.rules.rules_engine import classify_period
 
 DEFAULT_INDOOR_ACTIVITIES = {
     "primary": [

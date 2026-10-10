@@ -6,7 +6,7 @@ for 1,000 synthetic Delhi-NCR schools under DynamoDB Single-Table partitioning.
 
 import time
 import hashlib
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 def simulate_1000_tenants_scaling(batch_size: int = 1000) -> Dict[str, Any]:
     start_time = time.perf_counter()

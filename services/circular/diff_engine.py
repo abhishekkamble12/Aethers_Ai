@@ -6,7 +6,7 @@ Enforces immutable versioning with cryptographic content hashing.
 
 import hashlib
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 def compute_ruleset_hash(ruleset: Dict[str, Any]) -> str:
     """Computes SHA256 digest of ruleset for immutable versioning."""

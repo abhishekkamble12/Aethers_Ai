@@ -47,7 +47,9 @@
       "TimeoutSeconds": 60,
       "Catch": [
         {
-          "ErrorEquals": ["States.Timeout"],
+          "ErrorEquals": [
+            "States.Timeout"
+          ],
           "ResultPath": "$.timeout_error",
           "Next": "EscalateToVicePrincipal"
         }
@@ -71,12 +73,14 @@
       "TimeoutSeconds": 60,
       "Catch": [
         {
-          "ErrorEquals": ["States.Timeout"],
+          "ErrorEquals": [
+            "States.Timeout"
+          ],
           "ResultPath": "$.final_timeout_error",
           "Next": "FailSafeNoBroadcast"
         }
       ],
-      "Next": "ProcessDecisionAction"
+      "Next": "ProcessEscalatedApproval"
     },
     "ProcessDecisionAction": {
       "Type": "Choice",
@@ -84,7 +88,7 @@
         {
           "And": [
             {
-              "Variable": "$.approval_result.action",
+              "Variable": "$.approval_result",
               "IsPresent": true
             },
             {
@@ -101,11 +105,17 @@
             }
           ],
           "Next": "DraftAndDispatchNotices"
-        },
+        }
+      ],
+      "Default": "FailSafeNoBroadcast"
+    },
+    "ProcessEscalatedApproval": {
+      "Type": "Choice",
+      "Choices": [
         {
           "And": [
             {
-              "Variable": "$.escalated_approval_result.action",
+              "Variable": "$.escalated_approval_result",
               "IsPresent": true
             },
             {

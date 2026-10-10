@@ -4,10 +4,8 @@ Verifies all hard constraints, order hierarchy, pessimistic checks, and fallback
 """
 
 import unittest
-import copy
 from services.rules.rules_engine import (
     classify_period,
-    validate_ruleset_jurisdiction,
     JurisdictionMismatchError
 )
 from services.planner.planner import plan_schedule

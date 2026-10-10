@@ -11,7 +11,7 @@ import json
 import os
 import logging
 import urllib.parse
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,6 @@ def _invoke_bedrock_nova(
     """
     try:
         import boto3
-        from botocore.exceptions import ClientError, NoCredentialsError, EndpointConnectionError
 
         client = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
 
@@ -89,10 +88,21 @@ def _invoke_bedrock_nova(
             f"Do NOT include any information not provided above. Do NOT invent regulations."
         )
 
+        # Nova Lite uses Converse API format
         request_body = json.dumps({
-            "inputText": prompt,
-            "textGenerationConfig": {
-                "maxTokenCount": 300,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt
+                        }
+                    ]
+                }
+            ],
+            "inferenceConfig": {
+                "maxTokens": 300,
                 "temperature": 0.3,
                 "topP": 0.9
             }
@@ -106,7 +116,8 @@ def _invoke_bedrock_nova(
         )
 
         response_body = json.loads(response["body"].read())
-        generated_text = response_body.get("results", [{}])[0].get("outputText", "").strip()
+        # Extract text from Nova Lite response format
+        generated_text = response_body.get("output", {}).get("message", {}).get("content", [{}])[0].get("text", "").strip()
 
         if generated_text and len(generated_text) > 20:
             logger.info("Bedrock Nova Lite generated notice successfully (len=%d)", len(generated_text))

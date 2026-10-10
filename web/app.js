@@ -16,34 +16,34 @@ const FORECAST_PM25 = {
   "P1": 210, "P2": 280, "P3": 360, "P4": 395, "P5": 340, "P6": 260, "P7": 140, "P8": 95
 };
 
-// Cryptographic Audit Log Initial Chain
+// Cryptographic Audit Log Initial Chain (REAL SHA-256 hashes)
 let auditChain = [
   {
     seq: 1,
     prev_hash: "0000000000000000000000000000000000000000000000000000000000000000",
     actor_role: "scheduler:eventbridge",
     event: "STAGE_III_FORECAST_INGESTED",
-    payload_digest: "9f83a48e89f89a9f4b11f010f3c5ec7b3e15b630325f190e227fc69e2c608034",
+    payload_digest: "dea600875056e79ef3367e0283d95a1158f31be16e0b75b4ced781cb577f8369",
     ts: "2026-10-12T05:30:00Z",
-    hash: "3b9a7852c08ea3cfdfa4421b4a3a60dbbcf3a1e9c8bc8c78c801e8a93e3518e1"
+    hash: "570219d0482ccdbf2d3b414dbb4926d00de2d9310f0e76abba6e17933018b842"
   },
   {
     seq: 2,
-    prev_hash: "3b9a7852c08ea3cfdfa4421b4a3a60dbbcf3a1e9c8bc8c78c801e8a93e3518e1",
+    prev_hash: "570219d0482ccdbf2d3b414dbb4926d00de2d9310f0e76abba6e17933018b842",
     actor_role: "rules_engine",
     event: "RULES_EVALUATED_RULESET_R1",
-    payload_digest: "148e6589324adfe95c026d302b1154c185bbbc228c89b77d612e3ef2479e3940",
+    payload_digest: "94c7603a84d2399342420e2cf2e9a2b0e6d6e85b14542f6060fb44283284ba20",
     ts: "2026-10-12T05:30:02Z",
-    hash: "61ea150c22fa15e5c709e8b61c94d1a3c7cba2a32c4bbf3b0928929949603e5c"
+    hash: "22520f13d5bd5b368608d6e859209f833f654fb5731f2667614b37ada745f7aa"
   },
   {
     seq: 3,
-    prev_hash: "61ea150c22fa15e5c709e8b61c94d1a3c7cba2a32c4bbf3b0928929949603e5c",
+    prev_hash: "22520f13d5bd5b368608d6e859209f833f654fb5731f2667614b37ada745f7aa",
     actor_role: "planner:deterministic",
     event: "PLAN_A_B_GENERATED",
-    payload_digest: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    payload_digest: "b3e9b3d0c9d058d74c09dca080314699bc5afe2ccc83166b2ed5aedbce60e60d",
     ts: "2026-10-12T05:30:05Z",
-    hash: "9312dc86c8f2ba57147e4ad3d9c72d9b6d9a32c3f81eb5ba1a6bf9a09995c0c2"
+    hash: "a094dc8e6cc32627c44d8cdca7041e2ab30031cacd868a29012d5c66de8b807b"
   }
 ];
 

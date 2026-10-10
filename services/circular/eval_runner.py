@@ -12,7 +12,7 @@ Generates measured eval_table.json
 
 import json
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any
 from services.circular.validator import validate_ruleset_candidates
 
 def run_gold_evaluation() -> Dict[str, Any]:

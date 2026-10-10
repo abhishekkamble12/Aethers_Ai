@@ -25,16 +25,15 @@
       "applies_to": ["school"],
       "class_band": ["primary"],
       "condition": {
-        "stage_at_least": "II",
-        "pm25_greater_than": 120
+        "stage_at_least": "III"
       },
       "action": {
-        "outdoor_sports": "restricted",
-        "outdoor_pt": "restricted",
-        "hybrid_mode": "not_applicable"
+        "outdoor_sports": "banned",
+        "outdoor_pt": "banned",
+        "hybrid_mode": "mandatory"
       },
-      "source_id": "CAQM-Advisory-Sept-16-2026",
-      "source_quote": "Schools are advised to avoid outdoor sports activities for younger children during severe peak exposure windows and reschedule to indoor or alternate sessions."
+      "source_id": "DoE-circular-40-dt-17012025",
+      "source_quote": "All classes up to primary level (Nursery to Class V) shall run in hybrid mode (both physical and online options where feasible)."
     }
   ],
   "advisory_pm25": {
