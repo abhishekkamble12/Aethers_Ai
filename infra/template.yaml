@@ -200,6 +200,24 @@ Resources:
             FunctionName: !Ref NotificationFunction
         - LambdaInvokePolicy:
             FunctionName: !Ref AuditFunction
+
+  # 11. Run trigger: execution name = decision ID, so duplicate triggers are refused by Step Functions
+  TriggerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services.workflow.trigger.trigger_handler
+      Description: Starts SaansWorkflow idempotently (one execution per tenant/date/session)
+      Environment:
+        Variables:
+          STATE_MACHINE_ARN: !Ref SaansWorkflow
+      Policies:
+        - StepFunctionsExecutionPolicy:
+            StateMachineName: !GetAtt SaansWorkflow.Name
+        - Statement:
+            - Effect: Allow
+              Action:
+                - states:DescribeExecution
+              Resource: !Sub "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:execution:${SaansWorkflow.Name}:*"
       Events:
         EveningRun:
           Type: Schedule
@@ -212,8 +230,11 @@ Resources:
 
 Outputs:
   StateMachineArn:
-    Description: SaansWorkflow ARN (start a run with aws stepfunctions start-execution)
+    Description: SaansWorkflow ARN
     Value: !Ref SaansWorkflow
+  TriggerFunctionName:
+    Description: Start a run with aws lambda invoke --function-name <this> (idempotent per decision)
+    Value: !Ref TriggerFunction
   SaansTableArn:
     Description: DynamoDB Single Table ARN
     Value: !GetAtt SaansTable.Arn

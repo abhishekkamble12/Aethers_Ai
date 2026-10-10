@@ -1,5 +1,5 @@
 {
-  "Comment": "Saans School Air-Safety Automated Re-planning & Approval Workflow",
+  "Comment": "Saans: plan -> principal approval (60 s) -> vice-principal escalation (60 s) -> notices, or fail safe with no broadcast",
   "StartAt": "LoadContext",
   "States": {
     "LoadContext": {
@@ -10,7 +10,8 @@
         "Payload": {
           "tenant_id.$": "$.tenant_id",
           "date.$": "$.date",
-          "stage.$": "$.stage"
+          "stage.$": "$.stage",
+          "session.$": "$.session"
         }
       },
       "ResultSelector": {
@@ -18,6 +19,19 @@
         "audit_head.$": "$.Payload.audit_head"
       },
       "ResultPath": "$.planner_output",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
       "Next": "CheckIfInterventionNeeded"
     },
     "CheckIfInterventionNeeded": {
@@ -50,11 +64,18 @@
           "ErrorEquals": [
             "States.Timeout"
           ],
-          "ResultPath": "$.timeout_error",
+          "ResultPath": "$.approval_result_timeout",
           "Next": "EscalateToVicePrincipal"
+        },
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error_info",
+          "Next": "FailSafeError"
         }
       ],
-      "Next": "ProcessDecisionAction"
+      "Next": "UsePrincipalAnswer"
     },
     "EscalateToVicePrincipal": {
       "Type": "Task",
@@ -75,65 +96,49 @@
           "ErrorEquals": [
             "States.Timeout"
           ],
-          "ResultPath": "$.final_timeout_error",
-          "Next": "FailSafeNoBroadcast"
+          "ResultPath": "$.escalated_approval_result_timeout",
+          "Next": "FailSafeTimeout"
+        },
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error_info",
+          "Next": "FailSafeError"
         }
       ],
-      "Next": "ProcessEscalatedApproval"
+      "Next": "UseVicePrincipalAnswer"
+    },
+    "UsePrincipalAnswer": {
+      "Type": "Pass",
+      "InputPath": "$.approval_result",
+      "ResultPath": "$.final_approval",
+      "Next": "ProcessDecisionAction"
+    },
+    "UseVicePrincipalAnswer": {
+      "Type": "Pass",
+      "InputPath": "$.escalated_approval_result",
+      "ResultPath": "$.final_approval",
+      "Next": "ProcessDecisionAction"
     },
     "ProcessDecisionAction": {
       "Type": "Choice",
       "Choices": [
         {
-          "And": [
+          "Or": [
             {
-              "Variable": "$.approval_result",
-              "IsPresent": true
+              "Variable": "$.final_approval.action",
+              "StringEquals": "APPROVE_PLAN_A"
             },
             {
-              "Or": [
-                {
-                  "Variable": "$.approval_result.action",
-                  "StringEquals": "APPROVE_PLAN_A"
-                },
-                {
-                  "Variable": "$.approval_result.action",
-                  "StringEquals": "APPROVE_PLAN_B"
-                }
-              ]
+              "Variable": "$.final_approval.action",
+              "StringEquals": "APPROVE_PLAN_B"
             }
           ],
           "Next": "DraftAndDispatchNotices"
         }
       ],
-      "Default": "FailSafeNoBroadcast"
-    },
-    "ProcessEscalatedApproval": {
-      "Type": "Choice",
-      "Choices": [
-        {
-          "And": [
-            {
-              "Variable": "$.escalated_approval_result",
-              "IsPresent": true
-            },
-            {
-              "Or": [
-                {
-                  "Variable": "$.escalated_approval_result.action",
-                  "StringEquals": "APPROVE_PLAN_A"
-                },
-                {
-                  "Variable": "$.escalated_approval_result.action",
-                  "StringEquals": "APPROVE_PLAN_B"
-                }
-              ]
-            }
-          ],
-          "Next": "DraftAndDispatchNotices"
-        }
-      ],
-      "Default": "FailSafeNoBroadcast"
+      "Default": "FailSafeRejected"
     },
     "DraftAndDispatchNotices": {
       "Type": "Task",
@@ -143,25 +148,38 @@
         "Payload": {
           "tenant_id.$": "$.tenant_id",
           "decision_id.$": "$.planner_output.decision.decision_id",
-          "approval.$": "$.approval_result",
+          "approval.$": "$.final_approval",
+          "stage.$": "$.planner_output.decision.declared_stage",
           "plan.$": "$.planner_output.decision"
         }
       },
-      "ResultPath": "$.dispatch_result",
-      "Next": "AuditCloseApproved"
-    },
-    "FailSafeNoBroadcast": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Parameters": {
-        "FunctionName": "${AuditFunctionArn}",
-        "Payload": {
-          "tenant_id.$": "$.tenant_id",
-          "event": "FAILSAFE_TIMEOUT_NO_BROADCAST",
-          "reason": "Approval timed out after escalation; safe state preserved"
-        }
+      "ResultSelector": {
+        "notices.$": "$.Payload"
       },
-      "End": true
+      "ResultPath": "$.dispatch_result",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error_info",
+          "Next": "FailSafeError"
+        }
+      ],
+      "Next": "AuditCloseApproved"
     },
     "AuditCloseNoChange": {
       "Type": "Task",
@@ -170,9 +188,28 @@
         "FunctionName": "${AuditFunctionArn}",
         "Payload": {
           "tenant_id.$": "$.tenant_id",
+          "decision_id.$": "$.planner_output.decision.decision_id",
+          "execution.$": "$$.Execution.Name",
           "event": "RUN_CLOSED_NO_CHANGE"
         }
       },
+      "ResultSelector": {
+        "audit.$": "$.Payload"
+      },
+      "ResultPath": "$.audit_result",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
       "End": true
     },
     "AuditCloseApproved": {
@@ -182,10 +219,128 @@
         "FunctionName": "${AuditFunctionArn}",
         "Payload": {
           "tenant_id.$": "$.tenant_id",
+          "decision_id.$": "$.planner_output.decision.decision_id",
+          "execution.$": "$$.Execution.Name",
           "event": "RUN_CLOSED_APPROVED_AND_NOTIFIED",
-          "dispatch.$": "$.dispatch_result"
+          "action.$": "$.final_approval.action",
+          "approver_role.$": "$.final_approval.approver_role"
         }
       },
+      "ResultSelector": {
+        "audit.$": "$.Payload"
+      },
+      "ResultPath": "$.audit_result",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "End": true
+    },
+    "FailSafeRejected": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${AuditFunctionArn}",
+        "Payload": {
+          "tenant_id.$": "$.tenant_id",
+          "decision_id.$": "$.planner_output.decision.decision_id",
+          "execution.$": "$$.Execution.Name",
+          "event": "REJECTED_NO_BROADCAST",
+          "action.$": "$.final_approval.action",
+          "approver_role.$": "$.final_approval.approver_role"
+        }
+      },
+      "ResultSelector": {
+        "audit.$": "$.Payload"
+      },
+      "ResultPath": "$.audit_result",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "End": true
+    },
+    "FailSafeTimeout": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${AuditFunctionArn}",
+        "Payload": {
+          "tenant_id.$": "$.tenant_id",
+          "decision_id.$": "$.planner_output.decision.decision_id",
+          "execution.$": "$$.Execution.Name",
+          "event": "FAILSAFE_TIMEOUT_NO_BROADCAST",
+          "reason": "Principal and vice-principal did not answer in time; no notice sent"
+        }
+      },
+      "ResultSelector": {
+        "audit.$": "$.Payload"
+      },
+      "ResultPath": "$.audit_result",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "End": true
+    },
+    "FailSafeError": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${AuditFunctionArn}",
+        "Payload": {
+          "tenant_id.$": "$.tenant_id",
+          "decision_id.$": "$.planner_output.decision.decision_id",
+          "execution.$": "$$.Execution.Name",
+          "event": "WORKFLOW_ERROR_NO_BROADCAST",
+          "error.$": "$.error_info.Error",
+          "cause.$": "$.error_info.Cause"
+        }
+      },
+      "ResultSelector": {
+        "audit.$": "$.Payload"
+      },
+      "ResultPath": "$.audit_result",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
       "End": true
     }
   }
