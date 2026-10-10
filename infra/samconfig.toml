@@ -1,0 +1,16 @@
+# SAM deploy settings. Credentials come from the named AWS CLI profile; secrets are passed at deploy time.
+version = 0.1
+
+[default.global.parameters]
+stack_name = "saans"
+
+[default.build.parameters]
+template_file = "template.yaml"
+
+[default.deploy.parameters]
+region = "us-east-1"
+profile = "Abhi"
+capabilities = "CAPABILITY_IAM"
+resolve_s3 = true
+confirm_changeset = false
+fail_on_empty_changeset = false

@@ -11,6 +11,20 @@ Audited Sat Oct 10, 2026, 16:00 IST. Scope: backend only (`services/`, `infra/`,
 
 ---
 
+## 0. Live on AWS (Sat Oct 10, 17:50 IST)
+
+> **Deployed:** stack `saans` in **us-east-1** (profile `Abhi`, an IAM user, not root), 33 resources. API: `https://367bcz1ry5.execute-api.us-east-1.amazonaws.com/Prod/`. The region changed from ap-south-1 because us-east-1 has Nova on demand and the billing metrics.
+> **First real run:**
+> - Trigger → execution `TENANT_demo_2026-10-12_MORN` **SUCCEEDED** (LoadContext → RequestPrincipalApproval → UsePrincipalAnswer → DraftAndDispatchNotices → AuditCloseApproved).
+> - `GET /decisions` showed `AWAITING_PRINCIPAL` with the approval link. `POST /approve` (Plan B) returned 200; replaying the link returned 410.
+> - `GET /receipts/0iILY1AMCHHG`: 5 rows, server verdict valid. `GET /verify/...` returned 200 HTML.
+> - A second trigger returned `duplicate_suppressed` (existing SUCCEEDED). Bad stage gave a 400 JSON error. `/decisions` without the key gave 401.
+> - The audit chain on AWS shows every notice as `STATIC_TEMPLATE_FALLBACK, fallback_used: true` (Bedrock unavailable), the forecast as `is_replay: true`, and stricter limits for 3 classes.
+> - **Status upgrade:** M1, M2a, M2b, M3a and M3b are now **DONE (deployed and verified on AWS)**.
+>
+> **Bedrock spike: BLOCKED.** All Nova models return `ValidationException: Operation not allowed`. Cause: the account is on the AWS **Free plan** (`accountPlanType: FREE`, $149.61 credits), and the Nova Lite on-demand quota is **0** tokens and 0 requests per minute. The fix is the owner's decision: upgrade to the Paid plan (credits carry over). Until then X1 and M4 can't produce real model output, and notices use the labelled static fallback.
+> **Billing safety:** an existing "My Zero-Spend Budget" emails on any spend. AWS/Billing metrics aren't available yet, so no separate CloudWatch billing alarm was added.
+
 ## 1. Verdict
 
 | Criterion | Score | Evidence |

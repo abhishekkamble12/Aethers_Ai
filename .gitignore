@@ -222,3 +222,6 @@ __marimo__/
 # Lambda bundle (scripts/build_lambda.py) and SAM build output
 infra/.lambda_src/
 .aws-sam/
+
+# Local deploy secrets (generated admin key for GET /decisions)
+infra/deploy.secrets
