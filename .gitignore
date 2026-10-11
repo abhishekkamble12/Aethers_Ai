@@ -249,3 +249,11 @@ legacy-frontend/
 
 # Written only during the Amplify build (amplify.yml); never commit
 .env.production
+
+.next/
+node_modules/
+
+
+.next/
+node_modules/
+
