@@ -306,7 +306,6 @@ def get_hourly_forecast(tenant_id: str = "demo",
             pass
 
     dt_ist = datetime.fromtimestamp(now, IST)
-    hour_bucket = dt_ist.strftime("%Y-%m-%dT%H")
 
     if source == "replay":
         replay_dt = dt_ist.replace(hour=0, minute=0, second=0, microsecond=0)

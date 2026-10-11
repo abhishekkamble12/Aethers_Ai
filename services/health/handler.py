@@ -10,7 +10,6 @@ status:  ok        everything works
 No secrets, approval links or per-class sensitive counts are returned.
 """
 
-import json
 import os
 import re
 import time

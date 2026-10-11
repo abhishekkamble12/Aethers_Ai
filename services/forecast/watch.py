@@ -7,7 +7,6 @@ if risk is 'act' and new, appends a provable CONTINGENCY_DRAFTED audit row.
 Never declares a GRAP stage, never notifies parents, never creates a decision or token.
 """
 
-import json
 import logging
 import os
 import time

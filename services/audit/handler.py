@@ -5,7 +5,6 @@ Audit Lambda handlers
 - audit_event_handler: terminal Step Functions states append to the chain
 """
 
-import json
 import os
 import re
 from datetime import datetime, timezone

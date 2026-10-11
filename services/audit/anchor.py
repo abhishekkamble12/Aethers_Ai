@@ -3,7 +3,6 @@ S3 Object Lock Anchor Module for Saans Audit Log
 Anchors daily head hashes of audit chains into an S3 bucket with Object Lock COMPLIANCE mode.
 """
 
-import json
 import logging
 import os
 import re

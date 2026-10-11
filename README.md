@@ -10,11 +10,45 @@
   <img src="https://img.shields.io/badge/AWS-Lambda%20%C2%B7%20Step%20Functions%20%C2%B7%20DynamoDB%20%C2%B7%20Bedrock-orange?logo=amazon-aws&style=flat-square" alt="AWS Lambda, Step Functions, DynamoDB, Bedrock">
   <img src="https://img.shields.io/badge/Python-3.12-blue?logo=python&style=flat-square" alt="Python 3.12">
   <img src="https://img.shields.io/badge/Next.js-16-black?logo=next.js&style=flat-square" alt="Next.js 16">
-  <img src="https://img.shields.io/badge/tests-257%20passing-brightgreen?style=flat-square" alt="257 tests passing">
+  <img src="https://img.shields.io/badge/tests-265%20passing-brightgreen?style=flat-square" alt="265 tests passing">
   <img src="https://img.shields.io/badge/scope-Delhi--NCR%20GRAP%20I%E2%80%93IV-purple?style=flat-square" alt="GRAP Stages I-IV">
   <img src="https://img.shields.io/badge/audit-SHA--256%20hash%20chain-teal?style=flat-square" alt="SHA-256 hash chain">
   <img src="https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square" alt="MIT License">
 </p>
+
+---
+
+## For judges: the 5-minute tour
+
+**1. Try the live system** (no account or key needed):
+
+| Try | What you'll see |
+| :--- | :--- |
+| [`/health`](https://367bcz1ry5.execute-api.us-east-1.amazonaws.com/Prod/health) | The declared GRAP stage, whether the forecast is live or replayed, which model is answering, and the audit-chain head |
+| [`/circulars`](https://367bcz1ry5.execute-api.us-east-1.amazonaws.com/Prod/circulars) | Paste a government order, or pick a sample. Choose the hostile one and watch code refuse it |
+| `curl -X POST https://367bcz1ry5.execute-api.us-east-1.amazonaws.com/Prod/rehearse -d '{"stage":"IV"}'` | Tomorrow's timetable re-planned for Stage IV, with a reason for every period. Nothing is saved |
+
+**2. Run it yourself** (about a minute; no AWS account, because every AWS service is faked in tests):
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+python run_all_tests.py          # 265 tests
+npm install && npm run dev       # the front end at http://localhost:3000, on the live API
+```
+
+**3. Read the code that matters:**
+
+| Claim | Where it lives |
+| :--- | :--- |
+| A clean forecast never overrides a government ban | [services/rules/rules_engine.py](services/rules/rules_engine.py) |
+| PE is moved or replaced, not cancelled, with no clashes | [services/planner/planner.py](services/planner/planner.py) |
+| A person approves; no answer means nothing is sent | [services/workflow/state_machine.json](services/workflow/state_machine.json) |
+| The AI proposes, code checks every rule and every number | [services/circular/validator.py](services/circular/validator.py), `check_notice` in [services/notify/drafting.py](services/notify/drafting.py) |
+| Every decision is tamper-evident and checkable in the browser | [services/audit/hash_chain.py](services/audit/hash_chain.py), [services/audit/verify_page.html](services/audit/verify_page.html) |
+| All of it as infrastructure-as-code | [infra/template.yaml](infra/template.yaml) |
+
+**4. What we don't claim:** see [Known limitations](#known-limitations). The forecast is modelled, there has been no
+pilot with a real school yet, and WhatsApp delivery only reaches demo phones.
 
 ---
 
@@ -108,6 +142,12 @@ python scripts/test_live_api.py
 ```
 
 ## Architecture
+
+<p align="center">
+  <img src="docs/architecture.png" alt="Saans architecture: the Next.js app calls API Gateway; EventBridge starts the nightly Step Functions run that plans, waits for the principal, escalates and fails safe; Lambda drafts notices with Bedrock as the primary model, a labelled fallback and a static template, all checked by code; everything is written to a hash-chained DynamoDB audit log anchored nightly in S3 Object Lock, which anyone can verify in their browser" width="900">
+</p>
+
+The detailed flow, every route and schedule:
 
 ```mermaid
 flowchart TD
@@ -280,6 +320,9 @@ npm run build && npm start                             # production build: use t
 
 `NEXT_PUBLIC_SAANS_API` points the app at a different deployment; it defaults to the live API above.
 
+The front end is hosted on AWS Amplify Hosting, which rebuilds it on every push using [amplify.yml](amplify.yml). The
+backend is deployed separately with CloudFormation (see [Deploy to AWS](#deploy-to-aws)).
+
 ## Privacy and security
 
 - **No child-level data.** Timetables are class-level. Teachers appear as codes. Sensitive students are stored as a
@@ -312,7 +355,7 @@ The tests cover planner edge cases, the approval workflow paths through the real
 chain under concurrent writers, the receipt verifier running the browser code under Node, forecast fallback and
 caching, the forecast watch, notice wording and provenance, the notice output check against recorded replies, the
 circular pipeline with scripted model replies, Bedrock-first failover, at-most-once WhatsApp delivery, the template's
-freedom from dependency cycles, and the Lambda bundle importing every handler. 257 tests, all passing.
+freedom from dependency cycles, and the Lambda bundle importing every handler. 265 tests, all passing.
 
 ## Deploy to AWS
 
@@ -385,7 +428,11 @@ app/           Next.js pages and the server-side admin proxy
 components/    front-end components (3D school scene, timetable, brief, receipt)
 lib/           API client, types, translations (English, Hindi, Tamil)
 public/        static assets and labelled API snapshots
+docs/          architecture diagram, demo script, blog draft; docs/archive/ holds the build-phase plans that test
+               and code comments cite (e.g. "hack_win M3")
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) to extend it and [CHANGELOG.md](CHANGELOG.md) for what changed when.
 
 ## Known limitations
 

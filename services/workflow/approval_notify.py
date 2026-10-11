@@ -4,7 +4,6 @@ Dispatches approval links via SNS (Email/SMS) when Step Functions pauses for hum
 """
 
 import logging
-import os
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)

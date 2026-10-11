@@ -6,7 +6,6 @@ approval link for the role it is waiting on. Because that link carries approval 
 the endpoint requires the `x-saans-admin-key` header (secret from the ADMIN_API_KEY env var).
 """
 
-import hmac
 import json
 import os
 import re
@@ -16,7 +15,7 @@ from typing import Any, Dict
 
 import boto3
 
-from services.common.http import ApiError, guarded, header, respond
+from services.common.http import ApiError, guarded, respond
 
 TENANT_RE = re.compile(r"^[a-z0-9_-]{1,40}$")
 SESSIONS = ("EVE", "MORN")

@@ -7,7 +7,7 @@ Implements the strict decision hierarchy:
 3. Humans last: Code decides and labels; humans approve.
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 
 STAGE_ORDER = {"I": 1, "II": 2, "III": 3, "IV": 4}
 

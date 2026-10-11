@@ -249,3 +249,6 @@ legacy-frontend/
 
 # Written only during the Amplify build (amplify.yml); never commit
 .env.production
+
+# Coding-agent rules that `next dev` writes and rewrites locally
+AGENTS.md
