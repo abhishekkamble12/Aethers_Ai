@@ -17,7 +17,16 @@
   <img src="https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square" alt="MIT License">
 </p>
 
+<p align="center">
+  <a href="ARCHITECTURE.md"><strong>Architecture Specs</strong></a> &bull;
+  <a href="CONTRIBUTING.md"><strong>Contributing Guide</strong></a> &bull;
+  <a href="CHANGELOG.md"><strong>Changelog</strong></a> &bull;
+  <a href="docs/DEMO_VIDEO_SCRIPT.md"><strong>Demo Video Script</strong></a> &bull;
+  <a href="https://367bcz1ry5.execute-api.us-east-1.amazonaws.com/Prod/health"><strong>Live AWS Health Probe</strong></a>
+</p>
+
 ---
+
 
 ## Executive Summary
 
@@ -47,7 +56,25 @@ School principals receive dense, multi-page legal circulars late in the evening 
 
 ## Comprehensive System Design & Architecture
 
-Saans is engineered entirely on **AWS Serverless infrastructure**, prioritizing low latency, high resilience, zero server maintenance, and strict adherence to the principle of least privilege.
+Saans is engineered entirely on **AWS Serverless infrastructure**, prioritizing low latency, high resilience, zero server maintenance, and strict adherence to the principle of least privilege. For formal deep-dive specifications, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+<p align="center">
+  <img src="docs/architecture.png" alt="Saans AWS Cloud Architecture Diagram - us-east-1" width="100%">
+</p>
+
+### The 6-Stage Operational Flow (As Illustrated Above)
+
+1. **Trigger (Amazon EventBridge):** Automated cron schedules trigger the pipeline without manual intervention &mdash; the 19:30 IST evening re-plan (`cron(0 14 * * ? *)`), the 16:30 IST proactive forecast watch (`cron(0 11 * * ? *)`), and the 23:55 IST audit anchor (`cron(25 18 * * ? *)`).
+2. **Decide (AWS Step Functions + Amazon SNS):** The Standard state machine (`SaansWorkflow`) executes the deterministic planner. If schedule modifications are necessary, `RequestApprovalFunction` pauses execution using `waitForTaskToken` and transmits single-use approval nonces to the principal via **Amazon SNS (Email and SMS)** with a strict 60-second escalation timer.
+3. **AI: Model Proposes, Code Decides (Amazon Bedrock + Code Gates):** Upon human approval, **Amazon Bedrock (Nova Lite)** drafts localized English and Hindi notices. If Bedrock is degraded, execution automatically cascades through our transparent fallback hierarchy (Groq Llama-3 $\rightarrow$ Static Bilingual Template). The output is subjected to deterministic code checks (validating verbatim quotes, numbers against the plan whitelist, receipt URLs, and Devanagari script integrity).
+4. **Notify (WhatsApp Dispatch):** Verified notices are delivered to class teachers via WhatsApp Click-to-Share links and, in live demonstrations, dispatched directly to verified devices via the **Meta WhatsApp Cloud API**.
+5. **Prove (Amazon DynamoDB + Amazon S3 Object Lock):** Every lifecycle transition appends a SHA-256 hash to a cryptographic ledger in DynamoDB using optimistic concurrency. At 23:55 IST, `AnchorFunction` commits the tenant's chain head to an **Amazon S3 bucket configured with Object Lock in COMPLIANCE mode (365-day retention)**, creating a WORM (Write-Once-Read-Many) legal record.
+6. **Verify (Public Web Crypto Receipt):** Parents, educators, and regulatory inspectors can open the public receipt page (`/verify/{id}`), where client-side JavaScript recalculates the entire mathematical chain locally in their browser using the native **W3C Web Crypto API**.
+
+---
+
+### Detailed Cloud Infrastructure Diagram
+
 
 ```mermaid
 flowchart TD
