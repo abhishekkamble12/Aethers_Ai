@@ -90,22 +90,22 @@ Saans is engineered entirely on **AWS Serverless infrastructure**, prioritizing 
 ```mermaid
 flowchart TD
     subgraph Clients ["Client Applications"]
-        UI["Next.js 16 Web Application<br/>(Rehearse · Today's Brief · Public Receipt)"]
-        BrowserCrypto["Browser Web Crypto Engine<br/>(Client-Side Independent Verification)"]
+        UI["Next.js 16 Web Application<br/>Rehearse · Today Brief · Public Receipt"]
+        BrowserCrypto["Browser Web Crypto Engine<br/>Client-Side Independent Verification"]
     end
 
     subgraph Ingress ["API Gateway & Schedulers"]
-        API["Amazon API Gateway (REST)<br/>Active X-Ray Tracing · CORS · Rate Limiting"]
+        API["Amazon API Gateway - REST<br/>Active X-Ray Tracing · CORS · Rate Limiting"]
         EB1["Amazon EventBridge (19:30 IST)<br/>Scheduled Evening Re-Plan Trigger"]
         EB2["Amazon EventBridge (16:30 IST)<br/>Scheduled Forecast Watch Rehearsal"]
         EB3["Amazon EventBridge (23:55 IST)<br/>Nightly Audit Anchor Schedule"]
     end
 
-    subgraph Orchestration ["Workflow Orchestration (Step Functions)"]
-        SFN["SaansWorkflow (Standard State Machine)<br/>waitForTaskToken · Deterministic Execution Name"]
+    subgraph Orchestration ["Workflow Orchestration"]
+        SFN["SaansWorkflow Standard State Machine<br/>waitForTaskToken · Deterministic Execution Name"]
     end
 
-    subgraph Compute ["AWS Lambda Compute Layer (Python 3.12)"]
+    subgraph Compute ["AWS Lambda Compute Layer - Python 3.12"]
         TR["TriggerFunction<br/>Idempotent Run Creator"]
         LP["IngestPlannerFunction<br/>LoadContext & Deterministic Planner"]
         RA["RequestApprovalFunction<br/>Issues Role-Bound Nonce Token"]
@@ -121,20 +121,21 @@ flowchart TD
 
     subgraph Intelligence ["AI & Machine Learning"]
         direction TB
-        BR["Amazon Bedrock (Primary)<br/>Amazon Nova Lite (Converse API)"]
+        BR["Amazon Bedrock Primary<br/>Amazon Nova Lite Converse API"]
         FB["Labelled Fallback Provider<br/>Groq-Hosted Llama-3"]
         ST["Deterministic Static Template<br/>Zero-Dependency Bilingual Fallback"]
-        BR -. "failover" .-> FB -. "failover" .-> ST
+        BR -.->|failover| FB
+        FB -.->|failover| ST
     end
 
     subgraph Storage ["Persistence & Compliance Storage"]
         DDB[("Amazon DynamoDB<br/>Single-Table Design · PITR · TTL Enabled")]
-        S3Lock[("Amazon S3 (Object Lock)<br/>WORM COMPLIANCE Mode · 365-Day Retention")]
+        S3Lock[("Amazon S3 Object Lock<br/>WORM COMPLIANCE Mode · 365-Day Retention")]
     end
 
     subgraph External ["External Services & Delivery"]
         OM["Open-Meteo Air Quality API<br/>CAMS Atmospheric Regional Model"]
-        SNS["Amazon SNS<br/>Principal Approval (SMS & Email)"]
+        SNS["Amazon SNS<br/>Principal Approval - SMS & Email"]
         WA["Meta WhatsApp Cloud API / Twilio<br/>Real Notice Delivery to Parents & Staff"]
     end
 
@@ -149,13 +150,13 @@ flowchart TD
     API -->|POST /runs| TR
     API -->|POST /rehearse| LP
     API -->|POST /approve| AP
-    API -->|GET /receipts, /verify| RF
-    API -->|GET, POST /circulars| CF
+    API -->|"GET /receipts & /verify"| RF
+    API -->|"GET & POST /circulars"| CF
     API -->|GET /forecast| LP
     API -->|GET /health| HF
 
     %% Workflow Orchestration
-    TR -->|StartExecution (Name = DecisionId)| SFN
+    TR -->|StartExecution with Decision ID| SFN
     SFN --> LP
     SFN --> RA
     SFN --> ND
@@ -164,7 +165,7 @@ flowchart TD
     %% Human in the loop callback
     RA -->|Send Task Token via SNS| SNS
     SNS -->|Action Link| AP
-    AP -->|states:SendTaskSuccess| SFN
+    AP -->|SendTaskSuccess Callback| SFN
 
     %% Storage & AI Integration
     LP --> OM
