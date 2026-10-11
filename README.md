@@ -18,15 +18,25 @@
 </p>
 
 <p align="center">
+  <a href="https://main.d2e6bzte551nn0.amplifyapp.com/"><strong>🚀 Live App (AWS Amplify)</strong></a> &bull;
+  <a href="https://aethers-ai.vercel.app/"><strong>⚡ Live Mirror (Vercel)</strong></a> &bull;
   <a href="ARCHITECTURE.md"><strong>Architecture Specs</strong></a> &bull;
   <a href="CONTRIBUTING.md"><strong>Contributing Guide</strong></a> &bull;
   <a href="CHANGELOG.md"><strong>Changelog</strong></a> &bull;
-  <a href="docs/DEMO_VIDEO_SCRIPT.md"><strong>Demo Video Script</strong></a> &bull;
-  <a href="https://367bcz1ry5.execute-api.us-east-1.amazonaws.com/Prod/health"><strong>Live AWS Health Probe</strong></a>
+  <a href="docs/DEMO_VIDEO_SCRIPT.md"><strong>Demo Script</strong></a> &bull;
+  <a href="https://367bcz1ry5.execute-api.us-east-1.amazonaws.com/Prod/health"><strong>Live API Health</strong></a>
 </p>
+
 
 ---
 
+> [!TIP]
+> **Quick Judge's Tour (Test the Live App in 60 Seconds):**
+> 1. **Experience Real-Time Re-Planning:** Open [Live App](https://main.d2e6bzte551nn0.amplifyapp.com/) (or [Vercel Mirror](https://aethers-ai.vercel.app/)) & drag the **Stage Slider (I &rarr; IV)**. Watch the schedule re-plan live and notice how outdoor periods swap to cleaner slots or ventilated indoor rooms.
+> 2. **Review the Principal's Decision Brief:** Navigate to [`/today`](https://main.d2e6bzte551nn0.amplifyapp.com/today) to inspect the 60-second operational dashboard, before-and-after timetable diff, and live countdown timer.
+> 3. **Verify the Cryptographic Proof:** Navigate to [`/receipt`](https://main.d2e6bzte551nn0.amplifyapp.com/receipt) and paste any notice to watch your browser recompute the SHA-256 hash chain client-side via the W3C Web Crypto API.
+
+---
 
 ## Executive Summary
 
@@ -42,6 +52,7 @@ School principals receive dense, multi-page legal circulars late in the evening 
 4. **Mathematical Cryptographic Proof:** Every decision, plan, and notification hash is chained via SHA-256 and anchored daily into an AWS S3 bucket with **Object Lock (COMPLIANCE mode)**. Anyone can recompute the entire chain client-side in their browser using the W3C Web Crypto API.
 
 ---
+
 
 ## The Four Systemic Failures and the Saans Solution
 
@@ -378,15 +389,20 @@ Evaluated on the standardized Delhi-NCR demo school model (6 classes, 48 daily p
 
 ---
 
-## Live Cloud Deployment & API Reference
+## Live Cloud Deployments & API Reference
 
-The production backend is fully deployed and operational on AWS CloudFormation:
+Saans is 100% deployed and publicly accessible on the web:
 
-```
-https://367bcz1ry5.execute-api.us-east-1.amazonaws.com/Prod
-```
+| Component | Hosting Service | Live URL | Status |
+| :--- | :--- | :--- | :---: |
+| **Web Application (Primary)** | **AWS Amplify Hosting** (Next.js 16 SSR) | [https://main.d2e6bzte551nn0.amplifyapp.com/](https://main.d2e6bzte551nn0.amplifyapp.com/) | 🟢 **Live** |
+| **Web Application (Mirror)** | **Vercel Edge Network** | [https://aethers-ai.vercel.app/](https://aethers-ai.vercel.app/) | 🟢 **Live** |
+| **Serverless API (Backend)** | **Amazon API Gateway** (us-east-1) | [`https://367bcz1ry5.execute-api.us-east-1.amazonaws.com/Prod`](https://367bcz1ry5.execute-api.us-east-1.amazonaws.com/Prod) | 🟢 **Live** |
+| **System Diagnostics** | **Health Diagnostic Probe** | [`/health`](https://367bcz1ry5.execute-api.us-east-1.amazonaws.com/Prod/health) | 🟢 **Healthy** |
 
 ### Complete Endpoint Reference
+
+
 
 | Method | Endpoint Route | Access Level | Description & Query Parameters |
 | :--- | :--- | :--- | :--- |

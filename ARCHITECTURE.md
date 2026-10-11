@@ -113,8 +113,10 @@ WATCH#<tenant_id>#<date>       FORECAST                -                   -
 
 ## Frontend Architecture (AWS Amplify)
 
-The Next.js 16 frontend is deployed via **AWS Amplify Hosting** using `amplify.yml`:
-* **Turbopack Build Pipeline:** Fast compilation and static page prerendering.
+The Next.js 16 frontend is deployed in production via **AWS Amplify Hosting**:
+* **Live Production URL:** [https://main.d2e6bzte551nn0.amplifyapp.com/](https://main.d2e6bzte551nn0.amplifyapp.com/)
+* **CI/CD Pipeline (`amplify.yml`):** Automated build pipeline with Next.js 16 (Turbopack) and SSR hosting.
 * **Backend Integration:** Connects to the CloudFormation API Gateway via `NEXT_PUBLIC_SAANS_API`.
 * **Security Proxy (`app/api/admin/`):** Server-side Next.js route handlers proxy administrative calls to API Gateway, ensuring the administrative secret never reaches client browser bundles.
 * **3D Visualizer:** Powered by Three.js and Framer Motion, illustrating school venues and dynamic PM2.5 infiltration models.
+
