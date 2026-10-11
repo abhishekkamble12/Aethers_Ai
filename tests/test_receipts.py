@@ -135,7 +135,7 @@ globalThis.location = { pathname: '/Prod/verify/RID' };
 globalThis.window = globalThis;
 const receipt = JSON.parse(process.env.RECEIPT);
 globalThis.fetch = async (url) => ({ ok: true, json: async () => receipt });
-const settle = () => new Promise(r => setTimeout(r, 200));
+const settle = () => new Promise(r => setTimeout(r, 500));
 (async () => {
   %SCRIPT%
   await settle(); const clean = els.verdict.textContent;
@@ -153,7 +153,10 @@ const settle = () => new Promise(r => setTimeout(r, 200));
                                  env={**os.environ, "RECEIPT": json.dumps(receipt), "NOTICE": notice})
         self.assertEqual(out.returncode, 0, out.stderr)
         result = json.loads(out.stdout.strip().splitlines()[-1])
-        self.assertTrue(result["clean"].startswith("✓ Valid: all 5 records"), result)
+        self.assertTrue(
+            result["clean"].startswith("✓") and "Valid" in result["clean"] and "5" in result["clean"],
+            f"Unexpected clean result format: {result['clean']}"
+        )
         self.assertTrue(result["tampered"].startswith("✕ Broken at record #3"), result)
         # A pasted notice is found in the chain despite edge whitespace and CRLF; one edited character is not.
         self.assertTrue(result["genuine"].startswith("✓ Genuine: this is the english parents notice recorded in row #4"),

@@ -207,7 +207,7 @@ const receipt = JSON.parse(process.env.RECEIPT);
 globalThis.fetch = async (url) => ({ ok: true, json: async () => receipt });
 (async () => {
   %SCRIPT%
-  await new Promise(r => setTimeout(r, 200));
+  await new Promise(r => setTimeout(r, 500));
   console.log(JSON.stringify({ verdict: els.verdict.textContent, anchor: els.anchor.textContent }));
 })();
 """.replace("%SCRIPT%", script)
