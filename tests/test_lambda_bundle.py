@@ -12,8 +12,10 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
-from build_lambda import build  # noqa: E402
+from scripts.build_lambda import build  # noqa: E402
+
 
 TEMPLATE = ROOT / "infra" / "template.yaml"
 
